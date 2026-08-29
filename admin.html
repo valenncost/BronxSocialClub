@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Bronx Social Club — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilos.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body data-page="admin">
+<div class="grain-layer"></div>
+
+<div class="demo-banner" id="demo-banner">
+  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+</div>
+
+<nav>
+  <button class="logo" onclick="go('eventos')">BRONX</button>
+  <div class="tabs">
+    <button class="tab active" id="tab-eventos" onclick="go('eventos')">Eventos</button>
+    <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Admin</button>
+  </div>
+  <button class="nav-user" id="tab-cuenta" onclick="go('cuenta')">Ingresar</button>
+</nav>
+
+<!-- ============ PÁGINA: ADMIN ============ -->
+<div class="page show" id="page-admin">
+  <section id="admin-login" style="display:none">
+    <div class="login-box">
+      <h3>Panel Admin</h3>
+      <p style="color:var(--dim);font-size:13px;margin-bottom:16px">acceso solo para el equipo de Bronx Social Club</p>
+      <input type="email" id="email" placeholder="Email" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')login()">
+      <input type="password" id="pass" placeholder="Contraseña" onkeydown="if(event.key==='Enter')login()">
+      <p class="err" id="err">Email o contraseña incorrectos</p>
+      <button class="btn" id="login-btn" onclick="login()" style="width:100%">Entrar</button>
+    </div>
+  </section>
+
+  <section id="admin-panel" style="display:none">
+    <h2>Panel Admin</h2>
+    <p class="sub">Gestión de eventos y base de compradores.</p>
+
+    <div class="stats">
+      <div class="stat"><b id="st-entradas">0</b><small>Entradas vendidas</small></div>
+      <div class="stat"><b id="st-compradores">0</b><small>Compradores</small></div>
+      <div class="stat"><b id="st-total">$0</b><small>Recaudado</small></div>
+      <div class="stat"><b id="st-ingresados">0</b><small>Ya ingresaron</small></div>
+    </div>
+
+    <div class="admin-section" id="sec-eventos">
+      <h3>Eventos</h3>
+      <div class="ev-admin-list" id="ev-admin-list"></div>
+
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px">
+        <h3 style="border:none;margin-bottom:16px" id="form-title">Nuevo evento</h3>
+        <p class="err" id="ev-err"></p>
+        <p class="ok" id="ev-ok"></p>
+        <input type="hidden" id="ev-id">
+        <div class="form-grid">
+          <div class="full"><label>Nombre del evento</label><input id="ev-nombre" placeholder="Winter Fest"></div>
+          <div><label>Fecha (texto)</label><input id="ev-fecha" placeholder="Sáb 18 Jul 2026"></div>
+          <div><label>Puertas</label><input id="ev-puertas" placeholder="Open doors 1:30 AM"></div>
+          <div><label>Precio general ($)</label><input id="ev-precio" type="number" placeholder="15000"></div>
+          <div><label>Lugar (nombre corto)</label><input id="ev-lugar" placeholder="Secret Location"></div>
+
+          <div class="full">
+            <label style="margin-bottom:8px">Lotes (opcional — si los usás, el precio general queda de respaldo)</label>
+            <p style="color:var(--dim);font-size:12px;margin:-4px 0 10px">Poné la cantidad de entradas de cada lote y el sistema pasa solo al siguiente cuando se agota. Si dejás la cantidad vacía, ese lote no se cierra automáticamente.</p>
+            <p style="color:var(--dim);font-size:12px;margin:-4px 0 10px">En <b>Aviso</b> podés escribir un cartelito que se ve en la página del evento. Si ponés <b style="color:var(--red-soft)">{N}</b> se reemplaza solo por las que quedan — ej: <i>"Quedan las últimas {N}"</i>.</p>
+            <div class="lotes-grid">
+              <div><small>Early Bird</small><input id="ev-lote-eb" type="number" placeholder="Precio $"><input id="ev-cant-eb" type="number" min="0" placeholder="Cantidad"><input id="ev-aviso-eb" type="text" placeholder="Aviso (opcional)"><span class="lote-vendidas" id="ev-vend-eb"></span></div>
+              <div><small>Lote 1</small><input id="ev-lote-1" type="number" placeholder="Precio $"><input id="ev-cant-l1" type="number" min="0" placeholder="Cantidad"><input id="ev-aviso-l1" type="text" placeholder="Aviso (opcional)"><span class="lote-vendidas" id="ev-vend-l1"></span></div>
+              <div><small>Lote 2</small><input id="ev-lote-2" type="number" placeholder="Precio $"><input id="ev-cant-l2" type="number" min="0" placeholder="Cantidad"><input id="ev-aviso-l2" type="text" placeholder="Aviso (opcional)"><span class="lote-vendidas" id="ev-vend-l2"></span></div>
+              <div><small>Lote 3</small><input id="ev-lote-3" type="number" placeholder="Precio $"><input id="ev-cant-l3" type="number" min="0" placeholder="Cantidad"><input id="ev-aviso-l3" type="text" placeholder="Aviso (opcional)"><span class="lote-vendidas" id="ev-vend-l3"></span></div>
+            </div>
+            <label style="margin-top:12px">Lote inicial (desde acá arranca la venta; después avanza solo)</label>
+            <select id="ev-lote-activo">
+              <option value="general">Precio general (sin lotes)</option>
+              <option value="eb">Early Bird</option>
+              <option value="l1">Lote 1</option>
+              <option value="l2">Lote 2</option>
+              <option value="l3">Lote 3</option>
+            </select>
+          </div>
+
+          <div class="full"><label>Descripción</label><textarea id="ev-desc" placeholder="Contá de qué se trata la fiesta, line-up, dress code..."></textarea></div>
+          <div class="full check-row">
+            <input type="checkbox" id="ev-secreta" onchange="toggleSecreta()">
+            <label style="margin:0">Ubicación secreta (se revela por mail, sin mapa público)</label>
+          </div>
+          <div class="full" id="dir-fields"><label>Dirección (para el mapa)</label><input id="ev-direccion" placeholder="Av. Siempre Viva 742, Buenos Aires"></div>
+          <div class="full">
+            <label>Foto de portada</label>
+            <input type="file" id="ev-foto" accept="image/*" onchange="previewFoto()">
+            <img id="ev-thumb" class="thumb" alt="">
+            <input type="hidden" id="ev-foto-url">
+          </div>
+          <div class="full check-row">
+            <input type="checkbox" id="ev-agotado">
+            <label style="margin:0">Marcar como agotado</label>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+          <button class="btn" id="ev-save-btn" onclick="saveEvento()">Guardar evento</button>
+          <button class="btn ghost" onclick="resetEventoForm()">Limpiar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-section" id="sec-pasados">
+      <h3>Eventos pasados</h3>
+      <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Mostrá cómo se vivieron tus fiestas anteriores. Sin precios ni venta: solo el recuerdo.</p>
+      <div class="ev-admin-list" id="pe-list"></div>
+
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px">
+        <h3 style="border:none;margin-bottom:16px" id="pe-form-title">Nuevo evento pasado</h3>
+        <p class="err" id="pe-err"></p>
+        <p class="ok" id="pe-ok"></p>
+        <input type="hidden" id="pe-id">
+        <div class="form-grid">
+          <div class="full"><label>Nombre del evento</label><input id="pe-nombre" placeholder="Winter Fest Vol. 1"></div>
+          <div><label>Fecha (texto)</label><input id="pe-fecha" placeholder="Mayo 2026"></div>
+          <div><label>Lugar (nombre corto)</label><input id="pe-lugar" placeholder="Club X"></div>
+          <div class="full"><label>Ubicación / dirección</label><input id="pe-direccion" placeholder="Av. Siempre Viva 742, Bahía Blanca"></div>
+          <div class="full"><label>Descripción</label><textarea id="pe-desc" placeholder="Cómo fue la noche, artistas, momentos..."></textarea></div>
+          <div class="full">
+            <label>Foto de portada</label>
+            <input type="file" id="pe-foto" accept="image/*" onchange="previewFotoPasado()">
+            <img id="pe-thumb" class="thumb" alt="">
+            <input type="hidden" id="pe-foto-url">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+          <button class="btn" id="pe-save-btn" onclick="savePasado()">Guardar evento pasado</button>
+          <button class="btn ghost" onclick="resetPasadoForm()">Limpiar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-section" id="sec-escaner">
+      <h3>Escáner de entradas</h3>
+      <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Abrí el escáner en pantalla completa para controlar la puerta. Se marca cada entrada como usada al escanearla.</p>
+      <button class="btn" onclick="go('escaner')">Abrir escáner</button>
+    </div>
+
+    <div class="admin-section" id="sec-compradores">
+      <h3>Compradores</h3>
+      <div class="admin-bar">
+        <input type="text" id="filtro" placeholder="Buscar por nombre, apellido, email o código..." oninput="drawAdmin()">
+        <div class="filtros-row">
+          <select id="f-evento" onchange="drawAdmin()"><option value="">Todos los eventos</option></select>
+          <select id="f-lote" onchange="drawAdmin()"><option value="">Todos los lotes</option></select>
+          <select id="f-estado" onchange="drawAdmin()">
+            <option value="">Todos los estados</option>
+            <option value="aprobado">Aprobados</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="rechazado">Rechazados</option>
+          </select>
+          <select id="f-ingreso" onchange="drawAdmin()">
+            <option value="">Hayan ingresado o no</option>
+            <option value="si">Ya ingresaron</option>
+            <option value="no">Todavía no ingresaron</option>
+          </select>
+          <select id="f-orden" onchange="drawAdmin()">
+            <option value="recientes">Más recientes</option>
+            <option value="antiguos">Más antiguos</option>
+            <option value="nombre">Nombre A-Z</option>
+            <option value="total">Mayor precio</option>
+            <option value="evento">Por evento</option>
+            <option value="lote">Por lote</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn ghost" onclick="loadPurchases()">Actualizar</button>
+          <button class="btn ghost" onclick="limpiarFiltros()">Limpiar filtros</button>
+          <button class="btn ghost" id="btn-borrar-pend" onclick="borrarPendientes()" style="border-color:rgba(239,68,68,.5);color:#ef4444">Borrar pendientes</button>
+          <button class="btn ghost" onclick="exportCSV()">Descargar CSV</button>
+          <button class="btn ghost" onclick="logout()">Salir</button>
+        </div>
+      </div>
+
+      <p class="resumen-filtro" id="resumen-filtro"></p>
+
+      <div class="table-wrap" style="margin-bottom:18px">
+        <table>
+          <thead><tr>
+            <th>Lote</th><th>Entradas</th><th>Compradores</th><th>Recaudado</th>
+          </tr></thead>
+          <tbody id="tbody-lotes"></tbody>
+          <tfoot id="tfoot-lotes"></tfoot>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Fecha compra</th><th>Nombre</th><th>Apellido</th><th>Evento</th><th>Lote</th><th>Precio</th><th>Estado</th><th>Ingresó</th><th>Código</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="admin-section" id="sec-usuarios">
+      <h3>Usuarios registrados</h3>
+      <div class="admin-bar">
+        <input type="text" id="filtro-usuarios" placeholder="Buscar usuario..." oninput="drawUsuarios()">
+        <div style="display:flex;gap:10px">
+          <button class="btn ghost" onclick="loadUsuarios()">Actualizar</button>
+          <button class="btn ghost" onclick="exportUsuariosCSV()">Descargar CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Registrado</th><th>Nombre</th><th>Apellido</th><th>Teléfono</th><th>Email</th><th>Escáner</th>
+          </tr></thead>
+          <tbody id="tbody-usuarios"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="admin-section" id="sec-equipo">
+      <h3>Equipo (acceso al escáner)</h3>
+      <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Agregá los emails de tu equipo. Van a poder entrar a este panel <b>solo para escanear y ver compradores</b> — no pueden tocar eventos ni nada más. Cada uno tiene que crearse su cuenta en la página (Ingresar → Registrarse) con ese mismo email.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;max-width:460px">
+        <input type="email" id="staff-email" placeholder="amigo@gmail.com" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')agregarStaff()">
+        <button class="btn" onclick="agregarStaff()">Agregar</button>
+      </div>
+      <p class="ok" id="staff-ok"></p>
+      <p class="err" id="staff-err"></p>
+      <div class="ev-admin-list" id="staff-list"></div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <p style="font-family:'Archivo',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:24px;color:var(--red);margin-bottom:8px">BRONX</p>
+  <p>Bronx Social Club · bronxcerveceria@outlook.com</p>
+  <p style="margin-top:6px">Bronx Social Club — Casanova 888, Bahía Blanca — venta oficial</p>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Bronx Social Club — Escáner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilos.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<!-- Instalable como app: el ícono abre directo acá -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/iconos/icono-180.png">
+<meta name="theme-color" content="#0a0a0b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Escáner">
+<script>
+  // Solo se registra desde el escáner: el público que entra a comprar
+  // nunca instala esto, así no se le queda nada viejo guardado.
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", ()=>{
+      navigator.serviceWorker.register("/sw.js").catch(()=>{});
+    });
+  }
+</script>
+</head>
+<body data-page="escaner">
+<div class="grain-layer"></div>
+
+<div class="demo-banner" id="demo-banner">
+  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+</div>
+
+<nav>
+  <button class="logo" onclick="go('eventos')">BRONX</button>
+  <div class="tabs">
+    <button class="tab active" id="tab-eventos" onclick="go('eventos')">Eventos</button>
+    <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Admin</button>
+  </div>
+  <button class="nav-user" id="tab-cuenta" onclick="go('cuenta')">Ingresar</button>
+</nav>
+
+<!-- ============ PÁGINA: ESCÁNER ============ -->
+<div class="page show" id="page-escaner">
+  <section style="max-width:560px;padding-top:32px">
+
+    <!-- Ingreso dentro del propio escáner: en el celular de la puerta no hay
+         que pasar por el panel ni volver de ahí a mano. -->
+    <div id="esc-login" style="display:none">
+      <div class="esc-marca">BRONX<span>.</span></div>
+      <h2>Escáner</h2>
+      <p class="sub" style="margin-bottom:20px">Ingresá con tu cuenta del equipo para controlar la puerta.</p>
+      <div class="login-box" style="margin:0">
+        <input type="email" id="esc-email" placeholder="Email" autocomplete="username" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')loginEscaner()">
+        <input type="password" id="esc-pass" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginEscaner()">
+        <p class="err" id="esc-err"></p>
+        <button class="btn" id="esc-login-btn" onclick="loginEscaner()" style="width:100%">Entrar</button>
+        <button class="link-mini" onclick="olvideEscaner()">¿Olvidaste tu contraseña?</button>
+      </div>
+    </div>
+
+    <div id="esc-app" style="display:none">
+    <button class="back volver-panel" style="padding:0 0 16px" onclick="stopScanner();go('admin')">← Volver al panel</button>
+    <h2>Puerta</h2>
+
+    <div class="esc-tabs">
+      <button class="esc-tab active" id="et-escaner" onclick="vistaPuerta('escaner')">Escáner</button>
+      <button class="esc-tab" id="et-vendidas" onclick="vistaPuerta('vendidas')">Vendidas</button>
+    </div>
+
+    <div id="vista-escaner">
+    <p class="sub" style="margin-bottom:20px">Apuntá al QR de cada entrada. Verde = pasa, rojo = no pasa.</p>
+
+    <div class="puerta-box">
+      <div class="puerta-estado" id="puerta-estado">Cargando...</div>
+      <div class="puerta-btns">
+        <button class="btn ghost btn-mini" id="puerta-bajar" onclick="descargarLista()">Descargar lista</button>
+        <button class="btn btn-mini" id="puerta-sync" onclick="sincronizarPuerta()" style="display:none">Subir ingresos</button>
+      </div>
+      <p class="puerta-ayuda">Descargá la lista <b>con señal, antes de abrir la puerta</b>. Después el escáner funciona igual aunque te quedes sin internet.</p>
+    </div>
+
+    <div id="scan-result" class="scan-result"></div>
+    <div id="reader"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 28px">
+      <button class="btn" id="scan-start" onclick="startScanner()">Iniciar cámara</button>
+      <button class="btn ghost" id="scan-stop" onclick="stopScanner()" style="display:none">Pausar</button>
+    </div>
+
+    <div class="scan-list-head">
+      <span id="scan-count">0 ingresos</span>
+      <button class="salir-app" onclick="salirEscaner()">Salir</button>
+    </div>
+    <div id="scan-list"></div>
+    </div>
+
+    <!-- ============ VENDIDAS ============ -->
+    <div id="vista-vendidas" style="display:none">
+      <p class="sub" style="margin-bottom:16px">Todas las entradas pagadas y quién las compró. Verde = ya entró.</p>
+      <input type="text" id="vend-filtro" placeholder="Buscar por nombre, evento o código..." oninput="dibujarVendidas()">
+      <div class="vend-resumen" id="vend-resumen"></div>
+      <div id="vend-list"></div>
+      <div class="scan-list-head" style="margin-top:20px;border-bottom:none;border-top:1px solid var(--line);padding-top:12px">
+        <button class="btn ghost btn-mini" onclick="cargarVendidas()">Actualizar</button>
+        <button class="salir-app" onclick="salirEscaner()">Salir</button>
+      </div>
+    </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <p style="font-family:'Archivo',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:24px;color:var(--red);margin-bottom:8px">BRONX</p>
+  <p>Bronx Social Club · bronxcerveceria@outlook.com</p>
+  <p style="margin-top:6px">Bronx Social Club — Casanova 888, Bahía Blanca — venta oficial</p>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>

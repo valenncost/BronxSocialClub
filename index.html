@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Bronx Social Club — Eventos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilos.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body data-page="eventos">
+<div class="grain-layer"></div>
+
+<div class="demo-banner" id="demo-banner">
+  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+</div>
+
+<nav>
+  <button class="logo" onclick="go('eventos')">BRONX</button>
+  <div class="tabs">
+    <button class="tab active" id="tab-eventos" onclick="go('eventos')">Eventos</button>
+    <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Admin</button>
+  </div>
+  <button class="nav-user" id="tab-cuenta" onclick="go('cuenta')">Ingresar</button>
+</nav>
+
+<!-- ============ PÁGINA: EVENTOS ============ -->
+<div class="page show" id="page-eventos">
+  <header class="hero">
+    <div class="glow g1" aria-hidden="true"></div>
+    <div class="glow g2" aria-hidden="true"></div>
+    <p class="eyebrow">bronx social club · bahía blanca</p>
+    <h1>Cachengue <em>es de Bronx</em></h1>
+    <p>Entradas para los eventos de Bronx Social Club. Comprá con Mercado Pago y recibí tu QR al instante.</p>
+    <a class="btn" href="#lista" onclick="event.preventDefault();document.getElementById('lista').scrollIntoView({behavior:'smooth'})">Ver próximos eventos</a>
+  </header>
+
+  <section id="lista">
+    <h2>Eventos</h2>
+    <p class="sub">Tocá un evento para ver los detalles. Todas las entradas incluyen QR nominado.</p>
+    <div class="grid" id="grid"><div class="loading">Cargando eventos...</div></div>
+  </section>
+
+  <section id="pasados-sec" style="display:none">
+    <h2>Eventos pasados</h2>
+    <p class="sub">Eventos ya finalizados.</p>
+    <div class="grid" id="grid-pasados"></div>
+  </section>
+</div>
+
+<!-- ============ PÁGINA: DETALLE EVENTO ============ -->
+<div class="page" id="page-detalle">
+  <div class="detail-bg" id="d-bg"></div>
+  <div class="detail-wrap">
+    <button class="back" onclick="go('eventos')">← Volver</button>
+    <div class="detail-cols">
+      <div class="detail-left">
+        <h1 id="d-name"></h1>
+        <div class="dmeta" id="d-meta"></div>
+        <div class="detail-desc" id="d-desc"></div>
+
+        <div id="d-galeria-sec" style="display:none">
+          <div class="gal-publica" id="d-galeria" style="margin-bottom:36px"></div>
+        </div>
+
+        <h3 class="d-section-title">Ubicación</h3>
+        <div id="d-location"></div>
+      </div>
+      <div class="detail-right">
+        <div class="d-flyer" id="d-flyer"></div>
+        <div class="d-buy-card">
+          <div class="d-lotes" id="d-lotes" style="display:none"></div>
+          <div class="d-buy-row">
+            <div>
+              <div class="d-buy-name" id="d-buy-name">Entrada General</div>
+              <div class="d-buy-price" id="d-price"></div>
+              <div class="lote-aviso" id="d-aviso" style="display:none"></div>
+            </div>
+            <button class="btn" id="d-buy-btn">Comprar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p style="font-family:'Archivo',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:24px;color:var(--red);margin-bottom:8px">BRONX</p>
+  <p>Bronx Social Club · bronxcerveceria@outlook.com</p>
+  <p style="margin-top:6px">Bronx Social Club — Casanova 888, Bahía Blanca — venta oficial</p>
+</footer>
+
+<!-- ============ MODAL COMPRA ============ -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modal-buy">
+    <button class="close" onclick="closeModal()" aria-label="Cerrar">✕</button>
+    <h3 id="m-title"></h3>
+    <p class="mdate" id="m-date"></p>
+
+    <div class="field">
+      <label>Cantidad de entradas</label>
+      <div class="qty">
+        <button onclick="chQty(-1)" aria-label="Menos">−</button>
+        <span id="qty">1</span>
+        <button onclick="chQty(1)" aria-label="Más">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Datos de cada entrada</label>
+      <div id="attendees"></div>
+    </div>
+
+    <div class="field">
+      <label>Email (te enviamos las entradas acá)</label>
+      <input id="f-email" type="email" placeholder="tumail@ejemplo.com">
+    </div>
+
+    <p class="err" id="buy-err">Completá nombre y apellido de cada entrada</p>
+    <div class="total mini"><span id="sub-label">Entradas</span><b id="subtotal"></b></div>
+    <div class="total mini"><span id="serv-label">Costo de servicio</span><b id="serv-total"></b></div>
+    <div class="total"><span id="total-label">Total</span><b id="total"></b></div>
+    <button class="btn" id="btn-confirm" onclick="confirmBuy()">Pagar con Mercado Pago</button>
+  </div>
+
+  <div class="modal" id="modal-done" style="display:none">
+    <button class="close" onclick="closeModal()" aria-label="Cerrar">✕</button>
+    <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:14px">✅ ¡Compra confirmada y guardada! También la ves en <b style="color:var(--white)">Mis Entradas</b>.</p>
+    <div id="done-ticket"></div>
+    <button class="btn" style="margin-top:16px" onclick="closeModal();go('entradas')">Ver Mis Entradas</button>
+  </div>
+</div>
+
+
+<script src="js/app.js"></script>
+</body>
+</html>
