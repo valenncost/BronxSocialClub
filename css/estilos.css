@@ -21,8 +21,10 @@
     filter:blur(50px)}
   a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 
-  /* ---------- NAV ---------- */
-  nav{
+  /* ---------- NAV ----------
+     Acotado a hijo directo de body: el panel admin tiene su propio <nav> en
+     el sidebar y no debe heredar nada de la barra de arriba. */
+  body > nav{
     position:sticky;top:0;z-index:50;
     display:flex;justify-content:space-between;align-items:center;gap:12px;
     padding:14px 20px;background:rgba(0,0,0,.92);backdrop-filter:blur(10px);
@@ -127,11 +129,6 @@
   .back:hover{background:rgba(255,255,255,.12)}
   .detail-cols{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:44px;align-items:start}
 
-  /* Organizador arriba de todo */
-  .d-organizador{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-  .d-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--panel);flex-shrink:0}
-  .d-org-nombre{font-family:'Archivo',sans-serif;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
-
   .detail-left h1{font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(1.8rem,4.5vw,3rem);line-height:1.05;margin-bottom:18px}
 
   /* Lugar / cuándo / edad, con la línea divisoria antes de los tickets */
@@ -152,12 +149,6 @@
   .d-vermas{background:none;border:none;padding:0;margin-top:10px;cursor:pointer;
     font-family:'Archivo',sans-serif;font-size:13px;font-weight:700;color:var(--red)}
   .d-vermas:hover{text-decoration:underline}
-
-  /* Tarjeta "Organizado por" */
-  .d-org-card{display:flex;align-items:center;gap:14px;background:#17171A;border:1px solid var(--line);border-radius:12px;padding:16px}
-  .d-org-card-txt{display:flex;flex-direction:column;min-width:0}
-  .d-org-card-txt b{font-size:15px;font-weight:700}
-  .d-org-card-txt span{font-size:13px;color:var(--dim)}
 
   .d-section-title{font-family:'Archivo',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;color:var(--white)}
   .secret-box{border:1px solid var(--red);border-radius:14px;padding:20px;background:rgba(245,140,41,.08);color:#ffcf9e;font-size:14px}
@@ -188,6 +179,7 @@
 
   /* ---------- ADMIN ---------- */
   .login-box{max-width:360px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:26px;text-align:center}
+  .login-logo{height:28px;width:auto;display:block;margin:0 auto 18px}
   .login-box h3{font-family:'Archivo',sans-serif;font-size:15px;text-transform:uppercase;margin-bottom:16px}
   input,textarea,select{
     width:100%;background:var(--black);border:1px solid var(--line);border-radius:6px;
@@ -270,7 +262,7 @@
 
   footer{border-top:4px solid var(--red);padding:32px 20px;text-align:center;color:var(--dim);font-size:13px}
   @media (max-width:640px){
-    nav{row-gap:10px}
+    body > nav{row-gap:10px}
     .logo{order:1;font-size:11.5px;flex:1;min-width:0;white-space:nowrap;text-align:left;padding:0}
     .nav-user{order:2;margin-left:auto;flex-shrink:0}
     .tabs{order:3;width:100%;justify-content:flex-start;gap:8px}
@@ -448,12 +440,70 @@ select{width:100%;background:var(--black);border:1px solid var(--line);border-ra
 .attendee-inputs input{flex:1;min-width:0}
 
 /* Secciones plegables del admin (animadas) */
-#admin-panel .admin-section > h3{cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
-#admin-panel .admin-section > h3::after{content:"▾";font-size:14px;color:var(--dim);transition:transform .3s cubic-bezier(.22,.61,.36,1);margin-left:12px}
-#admin-panel .admin-section.colapsada > h3::after{transform:rotate(-90deg)}
-.sec-body{overflow:hidden;transition:max-height .38s cubic-bezier(.22,.61,.36,1), opacity .3s ease}
-.admin-section.colapsada .sec-body{opacity:0}
-#admin-panel .admin-section.colapsada{padding-bottom:18px}
+/* ============================================================
+   PANEL ADMIN — dashboard con sidebar
+   Cada .admin-section es una pestaña: se muestra una sola por vez.
+   ============================================================ */
+.dash{display:flex;align-items:flex-start;min-height:100vh}
+
+/* --- Sidebar --- */
+.dash-side{position:sticky;top:0;flex:0 0 240px;width:240px;height:100vh;
+  display:flex;flex-direction:column;
+  background:var(--panel);border-right:1px solid var(--line);z-index:40}
+.dash-side-top{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:22px 20px;border-bottom:1px solid var(--line)}
+.dash-logo{height:24px;width:auto;display:block}
+.dash-cerrar{display:none;background:none;border:none;color:var(--dim);font-size:20px;line-height:1;cursor:pointer}
+
+.dash-nav{display:flex;flex-direction:column;gap:2px;padding:14px 12px;overflow-y:auto;flex:1}
+.dash-nav-item{display:flex;align-items:center;gap:12px;width:100%;
+  background:none;border:none;cursor:pointer;text-align:left;
+  font-family:'Archivo',sans-serif;font-size:14px;font-weight:500;color:var(--dim);
+  padding:11px 14px;border-radius:10px;transition:.15s}
+.dash-nav-item svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.dash-nav-item:hover{background:rgba(255,255,255,.05);color:var(--white)}
+.dash-nav-item.activo{background:rgba(245,140,41,.13);color:var(--red);font-weight:700}
+
+.dash-side-pie{display:flex;flex-direction:column;gap:2px;padding:14px 12px;border-top:1px solid var(--line)}
+.dash-link{background:none;border:none;cursor:pointer;text-align:left;
+  font-family:'Archivo',sans-serif;font-size:13px;color:var(--dim2);padding:8px 14px;border-radius:8px;transition:.15s}
+.dash-link:hover{color:var(--white);background:rgba(255,255,255,.05)}
+
+/* --- Contenido --- */
+.dash-main{flex:1;min-width:0}
+.dash-header{position:sticky;top:0;z-index:30;
+  display:flex;align-items:center;gap:14px;
+  padding:16px 28px;background:rgba(10,10,11,.92);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.dash-burger{display:none;background:none;border:1px solid var(--line);border-radius:9px;
+  color:var(--white);cursor:pointer;padding:7px;line-height:0}
+.dash-burger svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.dash-breadcrumb{flex:1;min-width:0;font-family:'Archivo',sans-serif;font-size:14px;color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-breadcrumb em{font-style:normal;color:var(--dim2);margin:0 6px}
+.dash-breadcrumb b{color:var(--white);font-weight:700}
+.dash-header .btn{flex-shrink:0;padding:10px 20px;font-size:13px}
+
+.dash-body{padding:28px}
+.dash-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
+
+/* Una pestaña por vez. aplicarRol() puede taparla con un display inline. */
+#admin-panel .admin-section{display:none;margin-bottom:0}
+#admin-panel .admin-section.activa{display:block}
+
+/* --- Móvil: el sidebar se guarda detrás de la hamburguesa --- */
+.dash-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:39}
+@media (max-width:900px){
+  .dash-side{position:fixed;top:0;left:0;transform:translateX(-100%);
+    transition:transform .25s cubic-bezier(.22,.61,.36,1);box-shadow:0 0 40px rgba(0,0,0,.6)}
+  .dash-side.abierto{transform:none}
+  .dash-cerrar{display:block}
+  .dash-burger{display:block}
+  .dash-backdrop.visible{display:block}
+  .dash-header{padding:14px 16px}
+  .dash-body{padding:20px 16px}
+}
+@media (prefers-reduced-motion: reduce){ .dash-side{transition:none} }
 
 
 /* Todo entra suave y escalonado */
@@ -461,12 +511,8 @@ select{width:100%;background:var(--black);border:1px solid var(--line);border-ra
 #my-tickets .paper-ticket:nth-child(3){animation-delay:.14s}
 #my-tickets .paper-ticket:nth-child(4){animation-delay:.21s}
 #my-tickets .paper-ticket:nth-child(5){animation-delay:.28s}
-#admin-panel .admin-section{animation:fadeUp .5s ease both}
-#admin-panel .admin-section:nth-of-type(2){animation-delay:.06s}
-#admin-panel .admin-section:nth-of-type(3){animation-delay:.12s}
-#admin-panel .admin-section:nth-of-type(4){animation-delay:.18s}
-#admin-panel .admin-section:nth-of-type(5){animation-delay:.24s}
-#admin-panel .admin-section:nth-of-type(6){animation-delay:.3s}
+/* Sin escalonado: ahora se ve una sección por vez, no una lista de todas */
+#admin-panel .admin-section.activa{animation:fadeUp .35s ease both}
 .stats{animation:fadeUp .45s ease both}
 .gal-publica img,.gal-publica .gal-video{animation:fadeUp .5s ease both}
 .ev-admin-item{animation:fadeUp .4s ease both}
@@ -474,7 +520,6 @@ select{width:100%;background:var(--black);border:1px solid var(--line);border-ra
 
 /* Respetar reducción de movimiento */
 @media (prefers-reduced-motion: reduce){
-  .sec-body{transition:none}
   #admin-panel .admin-section,.stats,.gal-publica img,.gal-publica .gal-video,.ev-admin-item,.table-wrap,#my-tickets .paper-ticket{animation:none}
 }
 

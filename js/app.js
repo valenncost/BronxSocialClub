@@ -256,21 +256,12 @@ async function loadEvents(){
 let cur = null;       // el evento abierto en el detalle
 let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
 
-// Quién organiza: por ahora siempre Bronx, no hay tabla de productoras
-const ORGANIZADOR = "Bronx Social Club";
 const EDAD_MINIMA_DEFECTO = 18;
 
-/* Cabecera del detalle: organizador, lugar, cuándo y edad mínima.
+/* Cabecera del detalle: lugar, cuándo y edad mínima.
    `cuando` sale de juntar fecha_texto y puertas, que son texto libre cargado
    desde el panel — acá sólo se muestran en mayúscula, no se reformatean. */
 function pintarCabeceraDetalle(ev, {cuando, edad}={}){
-  const org = document.getElementById("d-org-nombre");
-  if(org) org.textContent = ORGANIZADOR;
-  const org2 = document.getElementById("d-org-nombre-2");
-  if(org2) org2.textContent = ORGANIZADOR;
-  const orgSub = document.getElementById("d-org-sub");
-  if(orgSub) orgSub.textContent = ev.ubicacion_secreta ? "Bahía Blanca" : (ev.direccion || ev.lugar || "");
-
   const lugar = document.getElementById("d-lugar");
   if(lugar) lugar.textContent = ev.lugar || "";
 
@@ -811,72 +802,80 @@ async function determinarRol(email, token){
   return null;
 }
 // Muestra u oculta secciones del panel según el rol
+/* Secciones del panel: cada una es una pestaña del sidebar.
+   "Eventos pasados" vive adentro de Eventos y el escáner es una página
+   aparte, así que ninguno de los dos tiene entrada propia acá. */
+const SECCIONES_ADMIN = [
+  { clave:"resumen",     titulo:"Resumen" },
+  { clave:"eventos",     titulo:"Eventos" },
+  { clave:"compradores", titulo:"Compradores" },
+  { clave:"usuarios",    titulo:"Usuarios" },
+  { clave:"equipo",      titulo:"Equipo" }
+];
+let SECCION_ADMIN = "resumen";
+
 function aplicarRol(){
-  const soloAdmin = ["sec-eventos","sec-pasados","sec-usuarios","sec-equipo","btn-borrar-pend"];
+  const esAdmin = ROL === "admin";
+  // Ojo: además de la sección hay que esconder su botón del sidebar, si no
+  // el staff ve pestañas que lo llevan a un panel vacío.
+  const soloAdmin = [
+    "sec-eventos","sec-pasados","sec-usuarios","sec-equipo","btn-borrar-pend",
+    "nav-eventos","nav-usuarios","nav-equipo","btn-crear-evento"
+  ];
   soloAdmin.forEach(id=>{
     const el = document.getElementById(id);
-    if(el) el.style.display = (ROL==="admin") ? "" : "none";
+    if(el) el.style.display = esAdmin ? "" : "none";
   });
+  // El staff entra por Compradores: Resumen y el resto no son suyos
+  if(!esAdmin && !["resumen","compradores"].includes(SECCION_ADMIN)) SECCION_ADMIN = "compradores";
+}
+
+/* Cambia de pestaña: muestra una sola sección y actualiza el breadcrumb.
+   No recarga nada — los datos ya los cargó abrirPanel(). */
+function mostrarSeccionAdmin(clave){
+  const sec = SECCIONES_ADMIN.find(s => s.clave === clave);
+  if(!sec) return;
+  SECCION_ADMIN = clave;
+  // Quién puede ver qué lo decide aplicarRol() con un display inline; acá sólo
+  // se marca cuál es la activa, y el inline le gana a la clase si está vedada.
+  SECCIONES_ADMIN.forEach(s=>{
+    const panel = document.getElementById("sec-" + s.clave);
+    if(panel) panel.classList.toggle("activa", s.clave === clave);
+    const boton = document.getElementById("nav-" + s.clave);
+    if(boton) boton.classList.toggle("activo", s.clave === clave);
+  });
+  const titulo = document.getElementById("dash-titulo");
+  if(titulo) titulo.textContent = sec.titulo;
+  cerrarSidebar();
+  window.scrollTo({top:0});
+}
+
+/* Sidebar en móvil */
+function abrirSidebar(){ marcarSidebar(true); }
+function cerrarSidebar(){ marcarSidebar(false); }
+function marcarSidebar(abierto){
+  const side = document.getElementById("dash-side");
+  const telon = document.getElementById("dash-backdrop");
+  if(side) side.classList.toggle("abierto", abierto);
+  if(telon) telon.classList.toggle("visible", abierto);
+}
+
+/* "Crear evento" del header: abre Eventos con el formulario en blanco */
+function nuevoEvento(){
+  mostrarSeccionAdmin("eventos");
+  resetEventoForm();
+  const form = document.getElementById("ev-form");
+  if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+  const nombre = document.getElementById("ev-nombre");
+  if(nombre) nombre.focus({preventScroll:true});
 }
 // Carga todo el panel según el rol
-// Hace plegable cada sección del panel con animación suave
-function initColapsables(){
-  document.querySelectorAll("#admin-panel .admin-section > h3").forEach(t=>{
-    if(t.dataset.colap) return;
-    t.dataset.colap = "1";
-    const sec = t.parentElement;
-
-    // Envolver todo lo que no es el título en un cuerpo animable
-    const body = document.createElement("div");
-    body.className = "sec-body";
-    while(t.nextSibling){ body.appendChild(t.nextSibling); }
-    sec.appendChild(body);
-
-    // Arrancan abiertas y sin tope de altura: el contenido se carga después
-    // (tablas, listas) y si dejábamos una altura fija quedaba recortado y no
-    // se podía scrollear hasta abajo.
-    body.style.maxHeight = "none";
-
-    // Suelta el tope apenas termina de abrir. El temporizador es el seguro:
-    // si la animación no dispara —por ejemplo con animaciones reducidas— el
-    // evento nunca llega y la sección se quedaría cortada para siempre.
-    let liberar = null;
-    function liberarAltura(){
-      clearTimeout(liberar);
-      body.style.maxHeight = "none";
-    }
-
-    t.addEventListener("click", ()=>{
-      const abierto = !sec.classList.contains("colapsada");
-      clearTimeout(liberar);
-      if(abierto){
-        // Cerrar: fijar la altura actual y recién ahí ir a cero
-        body.style.maxHeight = body.scrollHeight + "px";
-        void body.offsetHeight;   // forzar el reflow para que anime
-        requestAnimationFrame(()=>{
-          sec.classList.add("colapsada");
-          body.style.maxHeight = "0px";
-        });
-      } else {
-        // Abrir: de cero a la altura real y después soltar el tope
-        sec.classList.remove("colapsada");
-        body.style.maxHeight = body.scrollHeight + "px";
-        body.addEventListener("transitionend", function fin(e){
-          if(e.propertyName === "max-height"){
-            body.removeEventListener("transitionend", fin);
-            liberarAltura();
-          }
-        });
-        liberar = setTimeout(liberarAltura, 500);
-      }
-    });
-  });
-}
 async function abrirPanel(){
   document.getElementById("admin-login").style.display="none";
-  document.getElementById("admin-panel").style.display="block";
-  initColapsables();
+  // Sin valor: el display lo pone .dash (flex), no un inline
+  document.getElementById("admin-panel").style.display="";
   aplicarRol();
+  mostrarSeccionAdmin(SECCION_ADMIN);   // aplicarRol ya lo corrigió si es staff
   // Esperamos las compras: renderEventAdmin necesita los conteos por tipo
   await loadPurchases();
   if(ROL==="admin"){
