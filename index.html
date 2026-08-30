@@ -59,19 +59,19 @@
     <button class="back" onclick="go('eventos')">← Volver</button>
     <div class="detail-cols">
       <div class="detail-left">
-        <h1 id="d-name"></h1>
-        <div class="dmeta" id="d-meta"></div>
-        <div class="detail-desc" id="d-desc"></div>
-
-        <div id="d-galeria-sec" style="display:none">
-          <div class="gal-publica" id="d-galeria" style="margin-bottom:36px"></div>
+        <div class="d-organizador">
+          <img class="d-avatar" src="/iconos/logo-bronx-cuadrado.png" alt="">
+          <span class="d-org-nombre" id="d-org-nombre"></span>
         </div>
 
-        <h3 class="d-section-title">Ubicación</h3>
-        <div id="d-location"></div>
-      </div>
-      <div class="detail-right">
-        <div class="d-flyer" id="d-flyer"></div>
+        <h1 id="d-name"></h1>
+
+        <div class="d-cabecera">
+          <div class="d-lugar" id="d-lugar"></div>
+          <div class="d-cuando" id="d-cuando"></div>
+          <div class="d-edad" id="d-edad"></div>
+        </div>
+
         <div class="d-buy-card">
           <div class="d-tipos" id="d-tipos"></div>
           <div class="d-resumen" id="d-resumen" style="display:none">
@@ -81,6 +81,35 @@
           </div>
           <button class="btn" id="d-buy-btn" disabled>Elegí tus entradas</button>
         </div>
+
+        <div id="d-galeria-sec" style="display:none">
+          <div class="gal-publica" id="d-galeria" style="margin-bottom:36px"></div>
+        </div>
+
+        <div class="d-bloque" id="d-desc-bloque">
+          <h3 class="d-section-title">Descripción</h3>
+          <div class="detail-desc colapsada" id="d-desc"></div>
+          <button class="d-vermas" id="d-vermas" onclick="toggleDesc()" style="display:none">Ver más</button>
+        </div>
+
+        <div class="d-bloque">
+          <h3 class="d-section-title">Organizado por</h3>
+          <div class="d-org-card">
+            <img class="d-avatar" src="/iconos/logo-bronx-cuadrado.png" alt="">
+            <div class="d-org-card-txt">
+              <b id="d-org-nombre-2"></b>
+              <span id="d-org-sub"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-bloque">
+          <h3 class="d-section-title">Ubicación</h3>
+          <div id="d-location"></div>
+        </div>
+      </div>
+      <div class="detail-right">
+        <div class="d-flyer" id="d-flyer"></div>
       </div>
     </div>
   </div>

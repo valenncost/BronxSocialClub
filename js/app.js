@@ -256,15 +256,76 @@ async function loadEvents(){
 let cur = null;       // el evento abierto en el detalle
 let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
 
+// Quién organiza: por ahora siempre Bronx, no hay tabla de productoras
+const ORGANIZADOR = "Bronx Social Club";
+const EDAD_MINIMA_DEFECTO = 18;
+
+/* Cabecera del detalle: organizador, lugar, cuándo y edad mínima.
+   `cuando` sale de juntar fecha_texto y puertas, que son texto libre cargado
+   desde el panel — acá sólo se muestran en mayúscula, no se reformatean. */
+function pintarCabeceraDetalle(ev, {cuando, edad}={}){
+  const org = document.getElementById("d-org-nombre");
+  if(org) org.textContent = ORGANIZADOR;
+  const org2 = document.getElementById("d-org-nombre-2");
+  if(org2) org2.textContent = ORGANIZADOR;
+  const orgSub = document.getElementById("d-org-sub");
+  if(orgSub) orgSub.textContent = ev.ubicacion_secreta ? "Bahía Blanca" : (ev.direccion || ev.lugar || "");
+
+  const lugar = document.getElementById("d-lugar");
+  if(lugar) lugar.textContent = ev.lugar || "";
+
+  const partes = cuando !== undefined ? cuando : [ev.fecha_texto, ev.puertas].filter(Boolean);
+  const cuandoEl = document.getElementById("d-cuando");
+  if(cuandoEl) cuandoEl.textContent = partes.join(" | ");
+
+  const edadEl = document.getElementById("d-edad");
+  if(edadEl){
+    // `edad_minima` todavía no existe en la tabla eventos (BRONX-SPEC §4);
+    // hasta que exista, cae en el default y se muestra igual.
+    const n = edad !== undefined ? edad : (ev.edad_minima || EDAD_MINIMA_DEFECTO);
+    edadEl.textContent = n ? `Edad mínima: ${n} años` : "";
+    edadEl.style.display = n ? "" : "none";
+  }
+}
+
+/* Descripción larga: se recorta y se abre con "Ver más". */
+function pintarDescripcion(texto){
+  const bloque = document.getElementById("d-desc-bloque");
+  const desc = document.getElementById("d-desc");
+  const btn = document.getElementById("d-vermas");
+  if(!bloque || !desc) return;
+  const hay = !!(texto || "").trim();
+  bloque.style.display = hay ? "" : "none";
+  desc.textContent = texto || "";
+  desc.classList.add("colapsada");
+  desc.classList.remove("recortada");
+  if(btn){ btn.textContent = "Ver más"; btn.style.display = "none"; }
+}
+/* El botón y el desvanecido sólo aparecen si el texto no entra en el recorte.
+   Hay que llamarlo con el detalle ya visible: escondido, las alturas dan 0. */
+function medirDesc(){
+  const desc = document.getElementById("d-desc");
+  const btn = document.getElementById("d-vermas");
+  if(!desc || !btn) return;
+  const desborda = !!desc.textContent.trim() && desc.scrollHeight > desc.clientHeight + 4;
+  desc.classList.toggle("recortada", desborda);
+  btn.style.display = desborda ? "" : "none";
+}
+function toggleDesc(){
+  const desc = document.getElementById("d-desc");
+  const btn = document.getElementById("d-vermas");
+  if(!desc || !btn) return;
+  const abierta = desc.classList.toggle("colapsada") === false;
+  desc.classList.toggle("recortada", !abierta);
+  btn.textContent = abierta ? "Ver menos" : "Ver más";
+}
+
 function openDetail(id, empujarURL=true){
   if(empujarURL){ try{ history.pushState(null, "", "?evento="+id); }catch(e){} }
   const ev = EVENTS.find(e=>e.id===id);
   if(!ev) return;
   document.getElementById("d-name").textContent = ev.nombre;
-  document.getElementById("d-meta").innerHTML =
-    `<span>📅 <b>${esc(ev.fecha_texto)}</b></span>
-     <span>🕐 <b>${esc(ev.puertas)}</b></span>
-     <span>📍 <b>${esc(ev.lugar)}</b></span>`;
+  pintarCabeceraDetalle(ev);
 
   // Fondo blurreado + flyer con la foto del evento
   const bg = document.getElementById("d-bg");
@@ -279,7 +340,7 @@ function openDetail(id, empujarURL=true){
     flyer.style.backgroundImage = "";
   }
 
-  document.getElementById("d-desc").textContent = ev.descripcion || "Pronto más información sobre este evento.";
+  pintarDescripcion(ev.descripcion || "Pronto más información sobre este evento.");
 
   const loc = document.getElementById("d-location");
   if(ev.ubicacion_secreta){
@@ -303,6 +364,7 @@ function openDetail(id, empujarURL=true){
   renderTiposDetalle(ev);
 
   go('detalle');
+  medirDesc();
 }
 
 /* ================== LISTA DE TIPOS EN EL DETALLE ==================
@@ -342,21 +404,27 @@ function filaTipoHTML(t, eventoAgotadoYa){
   const elegidas = Number(SELECCION[t.id]) || 0;
   const control = sinCupo
     ? `<span class="tipo-tag">Agotado</span>`
-    : `<div class="qty mini">
-         <button onclick="chTipo(${t.id},-1)" aria-label="Menos">−</button>
+    : `<div class="tipo-qty">
+         <button class="menos" onclick="chTipo(${t.id},-1)" aria-label="Menos">−</button>
          <span id="qty-${t.id}">${elegidas}</span>
-         <button onclick="chTipo(${t.id},1)" aria-label="Más">+</button>
+         <button class="mas" onclick="chTipo(${t.id},1)" aria-label="Más">+</button>
        </div>`;
 
-  return `<div class="tipo-item${sinCupo ? " agotado" : ""}">
-    <div class="tipo-info">
+  // El tope por compra es el mismo que aplica chTipo, así el cartel no miente
+  const tope = Math.min(MAX_POR_TIPO, restan);
+  const pie = (!sinCupo && t.cantidad != null)
+    ? `<div class="tipo-maximo">Máximo ${tope} por compra</div>` : "";
+
+  return `<div class="tipo-card${sinCupo ? " agotado" : ""}">
+    <div class="tipo-card-top">
       <div class="tipo-nombre">${esc(t.nombre)}</div>
       ${detalles.join("")}
     </div>
-    <div class="tipo-derecha">
+    <div class="tipo-card-pie">
       <div class="tipo-precio">${fmt(t.precio)}</div>
       ${control}
     </div>
+    ${pie}
   </div>`;
 }
 function chTipo(tipoId, delta){
@@ -2360,10 +2428,11 @@ async function openPasado(evId, empujarURL=true){
   if(empujarURL){ try{ history.pushState(null, "", "?pasado="+evId); }catch(e){} }
 
   document.getElementById("d-name").textContent = ev.nombre;
-  document.getElementById("d-meta").innerHTML =
-    `${ev.fecha_texto?`<span>📅 <b>${esc(ev.fecha_texto)}</b></span>`:""}
-     ${ev.lugar?`<span>📍 <b>${esc(ev.lugar)}</b></span>`:""}
-     <span>✅ <b>Evento finalizado</b></span>`;
+  // Un evento pasado no vende: sin edad mínima, y el "cuándo" lleva el aviso
+  pintarCabeceraDetalle(ev, {
+    cuando: [ev.fecha_texto, "Evento finalizado"].filter(Boolean),
+    edad: null
+  });
 
   const bg = document.getElementById("d-bg");
   const flyer = document.getElementById("d-flyer");
@@ -2377,7 +2446,7 @@ async function openPasado(evId, empujarURL=true){
     flyer.style.backgroundImage = "";
   }
 
-  document.getElementById("d-desc").textContent = ev.descripcion || "";
+  pintarDescripcion(ev.descripcion || "");
 
   // Evento pasado: sin tarjeta de compra
   const buyCard = document.querySelector(".d-buy-card");
@@ -2412,6 +2481,7 @@ async function openPasado(evId, empujarURL=true){
   }).join("");
 
   go('detalle');
+  medirDesc();
 }
 
 /* ================== INICIALIZADOR POR PÁGINA ================== */
