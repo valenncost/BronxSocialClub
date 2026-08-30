@@ -8,7 +8,7 @@
    versión nueva para la próxima vez. En la puerta importa que abra rápido y
    que abra siempre, aunque el celular no tenga señal. */
 
-const VERSION = "bronx-escaner-v1";
+const VERSION = "bronx-escaner-v2";
 const LECTOR_QR = "https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js";
 
 const ESENCIALES = [
@@ -16,6 +16,8 @@ const ESENCIALES = [
   "/css/estilos.css",
   "/js/app.js",
   "/iconos/icono-192.png",
+  "/iconos/logo-bronx.png",
+  "/iconos/logo-bronx-cuadrado.png",
   "/manifest.webmanifest",
   LECTOR_QR
 ];

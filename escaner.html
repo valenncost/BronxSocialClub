@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Bronx Social Club — Escáner</title>
+<link rel="icon" href="/iconos/logo-bronx-cuadrado.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilos.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <!-- Instalable como app: el ícono abre directo acá -->
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/iconos/icono-180.png">
+<link rel="apple-touch-icon" href="/iconos/logo-bronx-cuadrado.png">
 <meta name="theme-color" content="#0a0a0b">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -34,7 +35,7 @@
 </div>
 
 <nav>
-  <button class="logo" onclick="go('eventos')">BRONX</button>
+  <button class="logo" onclick="go('eventos')"><img src="/iconos/logo-bronx.png" alt="BRONX"></button>
   <div class="tabs">
     <button class="tab active" id="tab-eventos" onclick="go('eventos')">Eventos</button>
     <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
@@ -114,7 +115,7 @@
 </div>
 
 <footer>
-  <p style="font-family:'Archivo',sans-serif;font-weight:800;letter-spacing:-.01em;font-size:24px;color:var(--red);margin-bottom:8px">BRONX</p>
+  <img class="footer-logo" src="/iconos/logo-bronx.png" alt="BRONX">
   <p>Bronx Social Club · bronxcerveceria@outlook.com</p>
   <p style="margin-top:6px">Bronx Social Club — Casanova 888, Bahía Blanca — venta oficial</p>
 </footer>

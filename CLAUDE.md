@@ -6,27 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bronx Social Club — a ticketing site for a boliche (nightclub) in Bahía Blanca, Argentina (Casanova 888, since 2017, @bronx.socialclub, dueño Nano Rabbione). Static frontend (no build step, no framework, no package.json) that talks directly to Supabase from the browser.
 
-**This repo is a fork of an existing ticketing site (codename "torino") for a different client.** It was cloned file-for-file and only rebranded so far — see "Current status" below before assuming any business logic matches what Bronx actually needs.
+**This repo started as a fork of an existing ticketing site (codename "torino") for a different client.** Phase 1 rebranded it; Phase 2 replaced its pricing model. Anything not listed as done in "Current status" below is still torino code — don't assume it matches what Bronx needs.
 
 Full business requirements, the client's current ticket line-up, and the target architecture change are in **`BRONX-SPEC.md`** at the repo root — read it before doing any non-cosmetic work here. It is the source of truth for what Bronx needs; this file is about how the code is put together.
 
-## Current status (Phase 1 — rebrand only, logic untouched)
+## Current status (Phase 2 done — múltiples tipos de ticket)
 
 What's done:
-- All app files copied from the torino project: `index.html`, `admin.html`, `entradas.html`, `escaner.html`, `cuenta.html`, `css/estilos.css`, `js/app.js`, plus the scanner PWA plumbing (`manifest.webmanifest`, `sw.js`, `iconos/`).
-- Brand text swapped from "torino" to "Bronx Social Club" (nav logo, page `<title>`s, hero copy, footers, admin login copy, scanner login copy, manifest app name, service-worker cache namespace).
-- Color palette repointed to Bronx's identity: background `#0A0A0B`, accent gradient `#F4526B → #F58C29` (`--accent-gradient` / `--accent-gradient-diag` in `css/estilos.css`), solid `#F58C29` orange for small text/borders/badges (the `--red` variable, kept under its old name since it's referenced everywhere). See "Palette" below.
-- `iconos/*.png` regenerated in Bronx orange (same scanner-frame drawing as torino's, `#e10600` → `#F58C29`). They're flat-color generated PNGs, not photos — regenerate them with a script rather than hand-editing.
-- Supabase credentials point at **Bronx's own project** (`wxoxonthagjwhhzwlahz`), not torino's. `ADMIN_EMAIL` is currently the developer's address, not the client's — per `BRONX-SPEC.md` §6 it should become Nano Rabbione's before handoff.
+- **Phase 1 (rebrand).** All app files copied from torino, brand text swapped to "Bronx Social Club", palette repointed (background `#0A0A0B`, gradient `#F4526B → #F58C29`, solid orange `#F58C29`), `iconos/*.png` regenerated in orange (flat-color generated PNGs — regenerate with a script, don't hand-edit). Supabase credentials point at **Bronx's own project** (`wxoxonthagjwhhzwlahz`). `ADMIN_EMAIL` is still the developer's address, not the client's — per `BRONX-SPEC.md` §6 it becomes Nano Rabbione's before handoff, **in both `js/app.js` and `sql/02-rls.sql`**.
+- **Phase 2 (pricing model).** Sequential `lotes` are gone — replaced by the `tipos_ticket` table: several ticket types on sale at the same time, grouped into TICKETS and COMBOS on the event page, each with its own quantity picker; one purchase can mix types. See "Tipos de ticket" below. `eventos` no longer has `precio_general`, `lotes` or `lote_activo`.
+- **`sql/`** now holds every SQL the project needs (tables, RLS, the `ventas_por_tipo` view, the storage bucket). See `sql/README.md` for the order to run them.
 
-What's **not** done yet (still exactly as in torino — do not assume otherwise):
-- **Pricing model.** The site still sells through torino's sequential `lotes` (tiers that auto-advance as they sell out: Early Bird → Lote 1 → Lote 2 → Lote 3). Bronx needs **`tipos_ticket`**, several ticket types sold simultaneously (see `BRONX-SPEC.md` §3) — this is the single biggest change still pending, and it touches the DB schema, the admin event form, the event detail page, the buy modal, and the scanner.
-- Hidden/unlockable ticket types, free tickets (skip Mercado Pago), per-type validity windows, minimum age, "duplicate event" for the weekly recurring shows, multi-access tickets (combos) with a separate bottle-voucher QR — all pending, all detailed in `BRONX-SPEC.md` §4 and §9.
-- The 4-step FlashPass-style checkout (nominated tickets with DNI, order number, deferred delivery, etc.) — see `BRONX-SPEC.md` §10. Current checkout is still torino's single-modal flow.
-- The Supabase project exists but is **empty as far as this repo knows** — no table/RLS/migration files are committed here, and the `crear-pago` Edge Function has not been deployed. Until the schema and RLS policies are set up on the Supabase side, the app will connect and fail on missing tables rather than fall back to demo mode.
+What's **not** done yet:
+- **Nothing has been run against the live database.** The SQL in `sql/` was written but never executed — until it is, the app connects and fails on missing tables rather than falling back to demo mode. The `crear-pago` Edge Function has not been written or deployed either.
+- **Free tickets** ($0, skip Mercado Pago). The `tipos_ticket.precio` column allows 0 and the UI would render it, but checkout would send an invalid total — so `validarTipos()` in the admin deliberately rejects a price of 0 until this is built.
+- **Hidden tickets.** `tipos_ticket.oculto` / `codigo_acceso` exist and the RLS policy hides them from the public, but there's no unlock UI and no way to fetch them — that needs an RPC (see `sql/README.md`).
+- **Combos with a bottle voucher.** `accesos` is stored on the type and copied to each `compras` row, but a combo of 5 accesses still emits **one** QR per unit purchased, not 5 + a voucher. `BRONX-SPEC.md` §9 decides the target; the scanner side is step 8 of the plan.
+- Minimum age, "duplicate event" for the weekly recurring shows — `BRONX-SPEC.md` §4.
+- The 4-step FlashPass-style checkout (DNI per attendee, order number, deferred delivery) — `BRONX-SPEC.md` §10. Current checkout is still a single modal, now fed by the multi-type selection.
 - No GitHub-to-Cloudflare deploy or Mercado Pago credentials for Bronx yet (`BRONX-SPEC.md` §6). `MP_ACCESS_TOKEN` must be Bronx's so the money lands in their account.
-
-Because of the above, everything under "Architecture" below describes the **inherited torino architecture as it stands right now**, not the target Bronx design. Treat the `lotes`/`lote_activo` sections as due for replacement, not as a spec to preserve.
+- Service fee is still `SERVICIO_PCT = 0.08`; Bronx's commercial target is 10% (`BRONX-SPEC.md` §8).
 
 ## Running locally
 
@@ -52,6 +51,7 @@ Not deployed yet. Per `BRONX-SPEC.md` §6, this needs its own GitHub repo and it
 - `admin.html` — login + admin panel (events, past events/gallery, buyers table, registered users, staff/team management).
 - `escaner.html` — QR scanner for door check-in (uses the `html5-qrcode` library from a CDN). Also the only page that registers the service worker and links the manifest.
 - `sw.js` + `manifest.webmanifest` + `iconos/` — installable-app plumbing for the scanner (see Modo puerta below).
+- `sql/` — every SQL statement the Supabase project needs, numbered in run order (`01-tablas` → `02-rls` → `03-vistas` → `04-storage`). `sql/README.md` explains the order and what still needs SQL that isn't written yet. **This is the schema's source of truth** — when you change what the app reads or writes, change these files too.
 - `BRONX-SPEC.md` — the client brief: business context, target pricing model, feature gaps vs. FlashPass (the incumbent), and the phased work plan. Read this first for *why*; this file is for *how the code works*.
 
 Every HTML page loads the same `js/app.js` and `css/estilos.css`, and declares which page it is via `<body data-page="...">`. `initPage()` at the bottom of `app.js` (run on `DOMContentLoaded`) branches on that attribute to decide what to load/render.
@@ -85,20 +85,21 @@ Event detail and past-event detail deep-link via `?evento=<id>` / `?pasado=<id>`
 - `uploadFoto()` uploads to Supabase Storage bucket `fotos` (`/storage/v1/object/fotos/...`), used for both event cover photos and past-event gallery photos/videos.
 - Supabase Auth (`/auth/v1/token`, `/auth/v1/signup`, `/auth/v1/user`, `/auth/v1/authorize?provider=google`) backs both regular user accounts and admin/staff login — **it's the same account system**, not a separate admin login (see Roles below).
 
-Known tables (inherited from torino, inferred from `dbGet`/`dbInsert` calls — there is no migrations/schema file in this repo yet):
-- `eventos` — events. Flags: `activo`, `pasado`, `agotado`, `ubicacion_secreta`. Pricing: `precio_general`, `lotes` (jsonb: `{eb,l1,l2,l3}`), `lote_activo`. **Per `BRONX-SPEC.md` §3, this pricing model is slated to be replaced by a `tipos_ticket` table** — see "Current status" above.
-- `compras` — purchases/tickets. Fields include `evento`, `nombre`, `apellido`, `email`, `tipo` (lote name), `total`, `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`.
+Tables (defined in `sql/01-tablas.sql`, policies in `sql/02-rls.sql`):
+- `eventos` — events. Flags: `activo`, `pasado`, `agotado`, `ubicacion_secreta`. **No price columns** — pricing lives entirely in `tipos_ticket`.
+- `tipos_ticket` — the ticket types of an event, all on sale simultaneously: `evento_id`, `nombre`, `descripcion`, `precio`, `cantidad` (cupo, null = sin límite), `orden`, `categoria` (`ticket`|`combo`), `accesos`, `activo`, `oculto`, `codigo_acceso`, `valido_desde`, `valido_hasta`.
+- `compras` — purchases/tickets, one row per QR. `grupo` (order number, groups the rows of one checkout), `evento`/`evento_id`, `tipo`/`tipo_ticket_id`, `accesos`, `nombre`, `apellido`, `email`, `total` (what that one ticket cost, service fee included), `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`. Names *and* ids are stored so a ticket stays readable after its event or type is deleted.
 - `galeria` — photos/videos attached to a past event (`evento_id`, `tipo`: `foto`|`video`, `url`, `orden`).
-- `perfiles` — user profile mirror (name/surname/phone), read by the admin panel's "Usuarios registrados" table.
+- `perfiles` — user profile mirror (name/surname/phone), filled by an `auth.users` trigger, read by the admin panel's "Usuarios registrados" table.
 - `staff` — emails with scanner/admin-panel access (see Roles).
-- `ventas_por_lote` — **view**, not a table: approved ticket counts per event and tier, the only purchase data `anon` may read (see Lotes below).
+- `ventas_por_tipo` — **view**, not a table: approved ticket counts per `tipo_ticket_id`, the only purchase data `anon` may read (see below).
 
-None of these exist yet in a live database — Bronx needs its own Supabase project created from scratch, running the torino SQL plus the new `tipos_ticket` migration (`BRONX-SPEC.md` §6).
+None of this exists yet in a live database — the SQL has not been run.
 
 ### Backend that lives outside this repo
 
 Real payments call a Supabase **Edge Function** the client expects at `${SUPABASE_URL}/functions/v1/crear-pago` (see `confirmBuy()`). Its code is not in this repository — it's deployed separately in the Supabase project. From the client's perspective:
-1. `confirmBuy()` POSTs event/attendee/price data to `crear-pago`, which is expected to create a Mercado Pago preference and return `{ init_point }`, and the browser redirects there.
+1. `confirmBuy()` POSTs the order to `crear-pago`, which is expected to create a Mercado Pago preference and return `{ init_point }`, and the browser redirects there. The payload shape is documented in a comment right above that `fetch` — `{evento, evento_id, fecha_texto, lugar, email, items[], asistentes[], total}`, where `items` is one entry per ticket type with its quantity and `asistentes` is one per QR to emit. The function is expected to insert the `compras` rows itself with the service_role key (the browser has no insert policy on `compras`).
 2. Mercado Pago redirects back to the site with `?pago=ok|error|pendiente` (handled by `checkReturnFromPayment()`), implying a webhook/edge function elsewhere flips `compras.estado` to `aprobado` and emails the ticket (Resend, per the client brief) — not done from this static frontend. There is no webhook handler, Mercado Pago SDK, or Resend code anywhere in this repo.
 
 When working on payment/email behavior, remember the actual logic is server-side and invisible here — you can only change what this repo sends to `crear-pago` and how it reacts to the `pago=` redirect param. Bronx's own `MP_ACCESS_TOKEN` needs to be set on that (not-yet-created) edge function so money lands in Bronx's Mercado Pago account, not torino's (`BRONX-SPEC.md` §6).
@@ -118,62 +119,57 @@ Two consequences worth remembering before changing this code:
 
 Offline check-ins can't see each other across phones, so two offline scanners could admit the same ticket. That's inherent, not a bug to fix client-side.
 
-`BRONX-SPEC.md` §3 also flags a new problem the offline scanner will need to solve: combo tickets with `accesos > 1` (5 people per QR) — whether that's 5 separate QR codes or one QR with a use-counter is still an open decision, not yet implemented.
+The scanner does **not** yet handle `accesos > 1`: a combo row carries `accesos: 5` but its QR still admits one person. `BRONX-SPEC.md` §9 decides on 5 entry QRs plus a separate bottle-voucher QR — neither is implemented.
 
 ### Local-only "DEMO" mode
 
-`DEMO` is `!SUPABASE_URL` — blank out the credential at the top of `js/app.js` and the app runs entirely in memory (`DEMO_EVENTS`, `DEMO_PURCHASES`, fake login) with no network calls, showing the demo banner. Useful for UI work without touching real data. With Bronx's credentials filled in (the current state) `DEMO` is `false`. Keep the `DEMO` branches working when changing shared functions — `saveEvento`, `confirmBuy`, `login` etc. all branch on it.
+`DEMO` is `!SUPABASE_URL` — blank out the credential at the top of `js/app.js` and the app runs entirely in memory (`DEMO_EVENTS`, `DEMO_TIPOS`, `DEMO_PURCHASES`, fake login) with no network calls, showing the demo banner. Useful for UI work without touching real data. With Bronx's credentials filled in (the current state) `DEMO` is `false`. Keep the `DEMO` branches working when changing shared functions — `saveEvento`, `confirmBuy`, `login` etc. all branch on it.
 
 ### Roles: admin vs staff
 
 There is no separate "admin login" — `cuenta.html`'s Supabase Auth *is* the admin/staff login too (unified session, see `restoreAdminSession()`). Role is computed client-side by `determinarRol(email, token)`:
-- The email in `ADMIN_EMAIL` (js/app.js, currently blank) is always `"admin"` — full access. Needs to be set to Nano Rabbione's email once Bronx's Supabase project exists.
+- The email in `ADMIN_EMAIL` (js/app.js) is always `"admin"` — full access. It must match the email hardcoded in `es_admin()` in `sql/02-rls.sql`: `ADMIN_EMAIL` decides what the panel *shows*, `es_admin()` decides what the database *accepts*. Change one without the other and the panel either goes blank or shows buttons that fail.
 - Any email present in the `staff` table is `"staff"` — scanner + read-only "Compradores" view only.
 - Everyone else gets `null` and is denied entry to `/admin`.
 
 `aplicarRol()` hides admin-only DOM sections (`sec-eventos`, `sec-pasados`, `sec-usuarios`, `sec-equipo`, the "borrar pendientes" button) for staff. **This is UI-only gating** — real enforcement of what staff can/can't write must live in Supabase RLS policies, since a staff member has a valid bearer token and could otherwise call the REST API directly. Admins manage the `staff` table from "Equipo" in the admin panel (`agregarStaff`/`quitarStaff`/`toggleStaff`).
 
-### Lotes (pricing tiers) — inherited, slated for replacement
+### Tipos de ticket (the pricing model)
 
-Events currently sell at a flat `precio_general` or through up to four sequential tiers stored in `eventos.lotes` (`eb`=Early Bird, `l1`, `l2`, `l3` — see `LOTE_NOMBRES`/`ORDEN_LOTES`). **Tiers advance automatically as they sell out — this is the exact opposite of what Bronx needs** (`BRONX-SPEC.md` §3: several ticket types on sale simultaneously, not one at a time). Do not extend this system for new Bronx features; it exists here only because Phase 1 was rebrand-only.
+Every ticket type of an event is on sale **at the same time** — there is no active tier, no automatic advance. An event with no types is announced but not purchasable.
 
-`eventos.lotes` has two shapes and both must keep working until this is replaced — `loteInfo()` normalizes them:
-- Legacy: `{eb: 13000}` — a bare number, price only, **no quota**.
-- Current: `{eb: {precio: 13000, cantidad: 50}}` — `cantidad: null` means no quota.
+`TIPOS` is `{evento_id: [tipo, ...]}`, sorted by `orden`. `cargarTipos(todos)` fills it: the public page asks for `activo=true&oculto=false`, the admin panel passes `true` to get every type including paused and hidden ones.
 
-`loteActivo(ev)` is the single source of truth for the effective price/name, used everywhere pricing is shown or charged (cards, detail page, buy modal, `confirmBuy`'s call to `crear-pago`, admin summary). It walks the defined tiers in order and returns the first whose approved sales haven't reached its `cantidad`; if every tier is full it returns the last one with `todosAgotados: true`, and `eventoAgotado(ev)` (manual `agotado` flag OR `todosAgotados`) is what gates the sold-out UI.
+Sold counts live in `VENTAS_TIPO` (`{tipo_ticket_id: n}`), keyed by **id**, not name:
+- **Public pages**: `cargarVentasTipo()` reads the `ventas_por_tipo` view. Both it and `cargarTipos()` must be awaited *before* `loadEvents()`/`openDetail()`, or everything renders from a count of zero. If the view doesn't exist the error is swallowed, `VENTAS_VISTA_OK` stays false (the admin shows a warning) and all counts are zero.
+- **Admin**: `loadPurchases()` overwrites it via `ventasTipoDesdePurchases()`, computed from the full `compras` rows the panel already loads, so the numbers are exact even without the view.
 
-`eventos.lote_activo` is **not** the switch that opens a tier — it's a *floor*. `loteActivo()` starts scanning from it and never returns an earlier tier. `lote_activo: "general"` means "ignore tiers, use `precio_general`".
+The derived helpers are the ones to reuse — don't recompute this inline:
+- `restantesTipo(t)` — `cantidad == null` means no quota, so it returns `Infinity`.
+- `tipoAgotado(t)` / `tipoDisponible(t)`.
+- `precioDesde(ev)` — the cheapest type that still has room, or `null` (the card then reads "Próximamente"). `sinVenta(ev)` is the no-types-at-all case.
+- `eventoAgotado(ev)` — the manual `agotado` flag, **or** every type sold out. An event with zero types is not "agotado".
 
-Sold counts live in `VENTAS_LOTE` (`{"<evento nombre>": {"<lote nombre>": n}}`), keyed by **name**, because `compras.tipo` stores the tier's display name:
-- **Public pages**: `cargarVentasLote()` reads the `ventas_por_lote` view. Must be awaited *before* `loadEvents()`/`openDetail()`, or prices render from a count of zero.
-- **Admin**: `loadPurchases()` overwrites it via `ventasLoteDesdePurchases()`, computed from the full `compras` rows the panel already loads.
+**Selection and checkout.** `SELECCION` is `{tipo_ticket_id: cantidad}`, picked on the event detail page (`renderTiposDetalle` groups by `categoria` into TICKETS and COMBOS). `chTipo()` clamps to `min(MAX_POR_TIPO, restantesTipo)`. From there:
+- `itemsSeleccionados()` → `[{tipo, cantidad}]`, one per chosen type.
+- `unidadesSeleccionadas()` → one entry per QR to emit, in the same order the modal renders attendee rows and `confirmBuy()` reads them back. **These two orders must stay in sync** — both derive from `tiposALaVenta(cur)`, so don't sort one of them independently.
+- `totalesSeleccion()` → `{entradas, subtotal, servicio, total}`.
 
-If the view doesn't exist, `cargarVentasLote()` swallows the error, leaves `VENTAS_VISTA_OK` false and all counts at zero.
+A service fee (`SERVICIO_PCT`, currently 8% — Bronx's commercial target is 10%, see `BRONX-SPEC.md` §8) is added per ticket via `servicioDe(precio)`. The percentage shown in the UI is rendered from that same constant — don't hardcode it in the HTML.
 
-A service fee (`SERVICIO_PCT`, currently 8% — Bronx's commercial target is 10%, see `BRONX-SPEC.md` §8) is added on top of the tier price at checkout, computed client-side and passed to `crear-pago`. The percentage shown in the buy modal is rendered from that same constant by `updTotal()` — don't hardcode it in the HTML.
+**Admin editor.** `TIPOS_FORM` is an editable copy of the event's types; `TIPOS_BORRADOS` holds ids to delete. Nothing touches the database until "Guardar evento": `saveEvento()` writes the event first (a new one needs its id), then `sincronizarTipos(eventoId)` deletes, updates and inserts. The inputs write straight into `TIPOS_FORM` via `setTipoCampo()` and only add/move/delete re-render — re-rendering on every keystroke would drop focus mid-word.
 
-### Required SQL: the `ventas_por_lote` view
+### Required SQL: the `ventas_por_tipo` view
 
-Public visitors must never be able to read `compras` — it holds `codigo`, the exact value the door scanner accepts, plus every buyer's name and email. Counting tickets therefore goes through an aggregate-only view:
+Public visitors must never be able to read `compras` — it holds `codigo`, the exact value the door scanner accepts, plus every buyer's name and email. Counting tickets therefore goes through an aggregate-only view (`sql/03-vistas.sql`) that returns nothing but `tipo_ticket_id` and a count, and runs with its owner's permissions so it can read `compras` while the caller can't.
 
-```sql
-create or replace view ventas_por_lote as
-  select evento, tipo, count(*)::int as vendidas
-  from compras
-  where lower(estado) = 'aprobado'
-  group by evento, tipo;
-
-grant select on ventas_por_lote to anon, authenticated;
-```
-
-Never widen this to expose per-row purchase data to `anon`. (When `tipos_ticket` replaces `lotes`, this view will need an equivalent rework — see `BRONX-SPEC.md` §3.)
+Never widen this to expose per-row purchase data to `anon`.
 
 ## Conventions
 
 - **Spanish throughout**: variable/function names, DOM ids, table/column names, user-facing text. Match this when adding code — don't introduce English identifiers into `app.js`.
 - No modules/bundler: everything is a global function/variable in `app.js`, called via inline `onclick="..."` attributes in the HTML. New features follow the same pattern (a function in `app.js`, wired up with `onclick`/`onchange` in the HTML).
-- `esc()` (js/app.js) escapes `<`/`>` before interpolating any user-supplied string into `innerHTML`. Every place that builds HTML from `eventos`/`compras`/user input uses it — always use it for new interpolated HTML too.
+- `esc()` (js/app.js) escapes `<`, `>` and both quote characters before interpolating any user-supplied string into `innerHTML`. Every place that builds HTML from `eventos`/`tipos_ticket`/`compras`/user input uses it — always use it for new interpolated HTML too, including inside `value="..."` attributes.
 - `fmt()` formats prices as `$` + `es-AR` locale thousands separators; use it for any new price display instead of raw numbers.
 - Forms follow a repeated pattern: a hidden `*-id` input distinguishes create vs. edit, `reset*Form()`/`edit*()` pairs manage that, and `*-err`/`*-ok` `<p>` elements show inline validation/success messages (see the `ev-*` event form and `pe-*` past-event form for the template to copy).
 - Each `.admin-section` in `admin.html` is made collapsible generically by `initColapsables()` — don't hand-roll collapse behavior for new sections, just follow the existing `<h3>` + section markup and it's picked up automatically.

@@ -17,7 +17,10 @@ const DEMO = !SUPABASE_URL;   // sin credenciales cargadas, la app corre en memo
 if(DEMO){ const db=document.getElementById("demo-banner"); if(db) db.classList.add("show"); }
 
 const fmt = n => "$" + Number(n).toLocaleString("es-AR");
-const esc = s => (s||"").toString().replace(/</g,"&lt;").replace(/>/g,"&gt;");
+// Escapa también las comillas: mucho de esto se interpola dentro de value="..."
+const esc = s => (s||"").toString()
+  .replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 // Los headers usan el token del admin si hay sesión iniciada; si no, la clave pública.
 function authHeaders(extra={}){
@@ -71,7 +74,13 @@ async function uploadFoto(file){
 
 /* --- Datos demo --- */
 const DEMO_EVENTS = [
-  {id:1, nombre:"Winter Fest", fecha_texto:"Sáb 18 Jul 2026", lugar:"Secret Location", puertas:"Open doors 1:30 AM", precio_general:15000, arte:"red", agotado:false, ubicacion_secreta:true, descripcion:"La primera Winter Fest de Torinos Producciones. Una noche de música electrónica en una locación secreta que revelamos el mismo día por mail. Line-up sorpresa, barra completa y la mejor energía. Entrada general. Cupos limitados.", foto_url:null, direccion:null},
+  {id:1, nombre:"Cachengue es de Bronx", fecha_texto:"Sáb 5 Sep 2026", lugar:"Bronx Social Club", puertas:"Cena 22hs · Previa 00hs · Cachengue 01:30", arte:"red", agotado:false, ubicacion_secreta:false, descripcion:"El sábado clásico de Bronx. Cena, previa y cachengue hasta las 6. +18 con documento.", foto_url:null, direccion:"Casanova 888, Bahía Blanca"},
+];
+const DEMO_TIPOS = [
+  {id:101, evento_id:1, nombre:"LA TERRAZA - PREVIA DE AMIGOS", descripcion:"Acceso exclusivo terrazas. Barra libre.", precio:17000, cantidad:40, orden:0, categoria:"ticket", accesos:1, activo:true, oculto:false, valido_desde:"00:30", valido_hasta:"02:30"},
+  {id:102, evento_id:1, nombre:"GENERAL 1", descripcion:"Desde las 23:30, sin límite de horario.", precio:8000, cantidad:null, orden:1, categoria:"ticket", accesos:1, activo:true, oculto:false, valido_desde:"23:30", valido_hasta:null},
+  {id:103, evento_id:1, nombre:"GENERAL 2", descripcion:"Desde las 23:30, sin límite de horario.", precio:10000, cantidad:null, orden:2, categoria:"ticket", accesos:1, activo:true, oculto:false, valido_desde:"23:30", valido_hasta:null},
+  {id:104, evento_id:1, nombre:"5 ACCESOS + BOTELLA DE FERNET", descripcion:"Branca 1L con Coca.", precio:115000, cantidad:10, orden:3, categoria:"combo", accesos:5, activo:true, oculto:false, valido_desde:null, valido_hasta:null},
 ];
 let DEMO_PURCHASES = [];
 
@@ -113,113 +122,99 @@ function go(p){
 }
 
 
-/* ================== LOTES ================== */
-const LOTE_NOMBRES = { eb:"Early Bird", l1:"Lote 1", l2:"Lote 2", l3:"Lote 3", general:"General" };
-const ORDEN_LOTES = ["eb","l1","l2","l3"];
+/* ================== TIPOS DE TICKET ==================
+   Bronx vende VARIOS tipos a la vez (GENERAL 1, LA TERRAZA, combos con
+   botella...), no lotes que se abren de a uno. Cada evento tiene sus filas en
+   la tabla tipos_ticket y todas están a la venta al mismo tiempo. */
+const CATEGORIAS = [
+  { clave:"ticket", titulo:"Tickets" },
+  { clave:"combo",  titulo:"Combos" }
+];
+const MAX_POR_TIPO = 10;   // tope de unidades del mismo tipo en una compra
 
-/* Ventas aprobadas por evento y por lote: { "Nombre evento": { "Early Bird": 38 } }
-   En la página pública se llena desde la vista ventas_por_lote (solo totales,
-   sin datos de compradores). En el admin se recalcula desde PURCHASES, que ya
-   tiene las compras completas. */
-let VENTAS_LOTE = {};
+let TIPOS = {};        // { evento_id: [tipo, ...] } ya ordenados
+let VENTAS_TIPO = {};  // { tipo_ticket_id: entradas aprobadas }
 let VENTAS_VISTA_OK = false;
 
-async function cargarVentasLote(){
-  VENTAS_LOTE = {}; VENTAS_VISTA_OK = false;
+function agruparTipos(filas){
+  TIPOS = {};
+  (Array.isArray(filas) ? filas : []).forEach(t=>{
+    (TIPOS[t.evento_id] = TIPOS[t.evento_id] || []).push(t);
+  });
+  Object.values(TIPOS).forEach(a => a.sort((x,y)=> (x.orden - y.orden) || (x.id - y.id)));
+}
+/* En la página pública se piden solo los que se venden; en el admin se piden
+   todos, porque el panel también edita los pausados. */
+async function cargarTipos(todos=false){
+  if(DEMO){ agruparTipos(DEMO_TIPOS); return; }
+  const q = todos
+    ? "order=orden.asc,id.asc"
+    : "activo=eq.true&oculto=eq.false&order=orden.asc,id.asc";
+  try{ agruparTipos(await dbGet("tipos_ticket", q)); }
+  catch(e){ TIPOS = {}; console.warn("No se pudieron leer los tipos de ticket:", e.message); }
+}
+
+/* Cuántas se vendieron de cada tipo. El público lo lee de la vista
+   ventas_por_tipo (solo totales: la tabla compras tiene los códigos de la
+   puerta y no la puede leer). El admin lo recalcula desde PURCHASES. */
+async function cargarVentasTipo(){
+  VENTAS_TIPO = {}; VENTAS_VISTA_OK = false;
   if(DEMO) return;
   try{
-    const filas = await dbGet("ventas_por_lote", "select=evento,tipo,vendidas");
+    const filas = await dbGet("ventas_por_tipo", "select=tipo_ticket_id,vendidas");
     if(!Array.isArray(filas)) return;
-    filas.forEach(f=>{
-      if(!VENTAS_LOTE[f.evento]) VENTAS_LOTE[f.evento] = {};
-      VENTAS_LOTE[f.evento][f.tipo] = Number(f.vendidas) || 0;
-    });
+    filas.forEach(f=>{ VENTAS_TIPO[f.tipo_ticket_id] = Number(f.vendidas) || 0; });
     VENTAS_VISTA_OK = true;
   }catch(e){
-    // La vista todavía no está creada en Supabase: sin conteos, los lotes se
-    // quedan en el que marca lote_activo (el comportamiento manual de antes).
-    console.warn("No se pudo leer ventas_por_lote:", e.message);
+    // Sin la vista no hay conteos: los cupos no se cierran solos.
+    console.warn("No se pudo leer ventas_por_tipo:", e.message);
   }
 }
-function ventasDeEvento(nombreEvento){ return VENTAS_LOTE[nombreEvento] || {}; }
-
-/* Un lote puede estar guardado como número (formato viejo: solo precio) o como
-   {precio, cantidad} (formato nuevo). Devuelve siempre {precio, cantidad} o null.
-   cantidad null = sin cupo definido, ese lote no se agota solo. */
-function loteInfo(lotes, clave){
-  const v = (lotes || {})[clave];
-  if(v == null) return null;
-  if(typeof v === "object"){
-    const precio = Number(v.precio) || 0;
-    if(!precio) return null;
-    const c = v.cantidad;
-    return { precio, cantidad: (c == null || c === "") ? null : (Number(c) || 0), aviso: v.aviso || "" };
-  }
-  const precio = Number(v) || 0;
-  return precio ? { precio, cantidad: null, aviso: "" } : null;
-}
-/* Cartelito editable del lote. {N} se reemplaza por las que quedan, así no hay
-   que editarlo a mano cada vez que se vende una. Si usa {N} pero el lote no
-   tiene cupo, no hay número que poner: no se muestra nada. */
-function textoAviso(lote, vendidas){
-  if(!lote || !lote.aviso) return "";
-  const usaN = /\{N\}/i.test(lote.aviso);
-  if(!usaN) return lote.aviso;
-  if(lote.cantidad == null) return "";
-  const restantes = Math.max(0, lote.cantidad - (Number(vendidas) || 0));
-  return lote.aviso.replace(/\{N\}/gi, restantes);
-}
-// Lotes cargados del evento, en orden, ya normalizados
-function lotesDefinidos(ev){
-  const lotes = ev.lotes || {};
-  return ORDEN_LOTES.map(k=>{
-    const info = loteInfo(lotes, k);
-    return info ? { clave:k, nombre:LOTE_NOMBRES[k], precio:info.precio, cantidad:info.cantidad, aviso:info.aviso } : null;
-  }).filter(Boolean);
-}
-
-/* Lote a la venta: {clave, nombre, precio, cantidad, vendidas, todosAgotados}.
-   Avanza solo — se salta los lotes cuyas ventas aprobadas ya llegaron al cupo.
-   lote_activo se sigue respetando como PISO: nunca volvemos a un lote anterior
-   al que el admin eligió a mano, así los eventos viejos no bajan de precio. */
-function loteActivo(ev){
-  const general = { clave:"general", nombre:"General", precio:Number(ev.precio_general)||0,
-                    cantidad:null, vendidas:0, todosAgotados:false };
-  const la = ev.lote_activo || "general";
-  if(la === "general") return general;
-
-  const defs = lotesDefinidos(ev);
-  if(!defs.length) return general;
-
-  const ventas = ventasDeEvento(ev.nombre);
-  let i = defs.findIndex(d => d.clave === la);
-  if(i < 0) i = 0;
-  for(; i < defs.length; i++){
-    const d = defs[i];
-    const vendidas = Number(ventas[d.nombre]) || 0;
-    if(d.cantidad == null || vendidas < d.cantidad) return { ...d, vendidas, todosAgotados:false };
-  }
-  const ult = defs[defs.length-1];
-  return { ...ult, vendidas: Number(ventas[ult.nombre]) || 0, todosAgotados:true };
-}
-// Agotado a mano desde el admin, o porque se vendieron todos los lotes
-function eventoAgotado(ev){ return !!ev.agotado || loteActivo(ev).todosAgotados; }
-
-// Cuenta ventas aprobadas por lote a partir de las compras cargadas en el admin
-function ventasLoteDesdePurchases(){
+function ventasTipoDesdePurchases(){
   const m = {};
   PURCHASES.forEach(c=>{
-    if((c.estado||"").toLowerCase() !== "aprobado") return;
-    const ev = c.evento, t = c.tipo || "General";
-    if(!m[ev]) m[ev] = {};
-    m[ev][t] = (m[ev][t] || 0) + 1;
+    if((c.estado||"").toLowerCase() !== "aprobado" || !c.tipo_ticket_id) return;
+    m[c.tipo_ticket_id] = (m[c.tipo_ticket_id] || 0) + 1;
   });
   return m;
 }
 
+function tiposDeEvento(evId){ return TIPOS[evId] || []; }
+// Los que ve el comprador: activos y no ocultos
+function tiposALaVenta(ev){ return tiposDeEvento(ev.id).filter(t => t.activo && !t.oculto); }
+function vendidasTipo(t){ return Number(VENTAS_TIPO[t.id]) || 0; }
+// cantidad null = sin cupo, nunca se agota
+function restantesTipo(t){ return t.cantidad == null ? Infinity : Math.max(0, t.cantidad - vendidasTipo(t)); }
+function tipoAgotado(t){ return restantesTipo(t) <= 0; }
+function tipoDisponible(t){ return !tipoAgotado(t); }
+
+// El "Desde $X" de la tarjeta: el más barato de los que todavía tienen cupo
+function precioDesde(ev){
+  const disp = tiposALaVenta(ev).filter(tipoDisponible);
+  return disp.length ? Math.min(...disp.map(t => Number(t.precio) || 0)) : null;
+}
+// Sin ningún tipo cargado el evento está anunciado pero todavía no se vende
+function sinVenta(ev){ return tiposALaVenta(ev).length === 0; }
+// Agotado a mano desde el panel, o porque se acabó el cupo de todos los tipos
+function eventoAgotado(ev){
+  if(ev.agotado) return true;
+  const ts = tiposALaVenta(ev);
+  return ts.length > 0 && ts.every(tipoAgotado);
+}
+
+// Texto de validez horaria, ej: "Válido de 23:30 a 02:00"
+function textoValidez(t){
+  if(t.valido_desde && t.valido_hasta) return `Válido de ${t.valido_desde} a ${t.valido_hasta}`;
+  if(t.valido_desde) return `Válido desde ${t.valido_desde}`;
+  if(t.valido_hasta) return `Válido hasta ${t.valido_hasta}`;
+  return "";
+}
+const servicioDe = precio => Math.round((Number(precio) || 0) * SERVICIO_PCT);
+
 /* ================== EVENTOS (tarjetas) ================== */
 async function loadEvents(){
   const grid = document.getElementById("grid");
+  if(!grid) return;   // el panel de admin no tiene la grilla pública
   try{
     EVENTS = DEMO ? DEMO_EVENTS : (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
   }catch(e){
@@ -230,6 +225,7 @@ async function loadEvents(){
   grid.innerHTML = "";
   EVENTS.forEach(ev=>{
     const agotado = eventoAgotado(ev);
+    const desde = precioDesde(ev);
     const el = document.createElement("article");
     el.className = "ticket" + (agotado ? " soldout" : "");
     const artClass = ev.foto_url ? "photo" : ev.arte;
@@ -244,11 +240,11 @@ async function loadEvents(){
         <span>🕐 <b>${esc(ev.puertas)}</b></span>
       </div></div>
       <div class="stub">
-        <div class="price"><small>Desde</small>${fmt(loteActivo(ev).precio)}</div>
+        <div class="price">${desde != null ? `<small>Desde</small>${fmt(desde)}` : `<small>Entradas</small>Próximamente`}</div>
         ${agotado ? '<span class="tag-soldout">Agotado</span>'
           : `<div class="actions">
                <button class="btn ghost" onclick="openDetail(${ev.id})">Ver más</button>
-               <button class="btn buy" onclick="openBuy(${ev.id})">Comprar</button>
+               ${sinVenta(ev) ? "" : `<button class="btn buy" onclick="openDetail(${ev.id})">Comprar</button>`}
              </div>`}
       </div>`;
     grid.appendChild(el);
@@ -257,6 +253,9 @@ async function loadEvents(){
 // [loadEvents(); -> ahora se llama desde initPage()]
 
 /* ================== DETALLE ================== */
+let cur = null;       // el evento abierto en el detalle
+let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
+
 function openDetail(id, empujarURL=true){
   if(empujarURL){ try{ history.pushState(null, "", "?evento="+id); }catch(e){} }
   const ev = EVENTS.find(e=>e.id===id);
@@ -299,67 +298,128 @@ function openDetail(id, empujarURL=true){
   const galSec = document.getElementById("d-galeria-sec");
   if(galSec) galSec.style.display = "none";
 
-  const laDet = loteActivo(ev);
-  // El lote a la venta es el título de la tarjeta (con su pill roja) y el precio
-  // va solo debajo. Antes el lote se repetía en el título Y en la pill: tres
-  // líneas apiladas diciendo lo mismo que la lista de lotes de acá arriba.
-  document.getElementById("d-buy-name").innerHTML = laDet.clave==="general"
-    ? "Entrada General"
-    : `<span class="lote-pill">${esc(laDet.nombre)}</span>`;
-  document.getElementById("d-price").textContent = fmt(laDet.precio);
-  // Agotado a mano desde el admin, o porque se vendieron todos los lotes:
-  // en los dos casos la lista va entera tachada y sin cartelito de urgencia.
-  const agotado = !!ev.agotado || laDet.todosAgotados;
-  // Cartelito del lote a la venta, ej: "Quedan las últimas 10"
-  const aviso = agotado ? "" : textoAviso(laDet, laDet.vendidas);
-
-  // Lista de lotes: cuál está tachado sale del cálculo automático de loteActivo
-  const lotesBox = document.getElementById("d-lotes");
-  let listaVisible = false;
-  if(lotesBox){
-    const definidos = lotesDefinidos(ev);
-    const idxActivo = definidos.findIndex(d => d.clave === laDet.clave);
-    listaVisible = laDet.clave!=="general" && definidos.length > 1;
-    if(listaVisible){
-      lotesBox.style.display = "flex";
-      lotesBox.innerHTML = definidos.map((d,i)=>{
-        let clase = "proximo", tag = "Próximamente", extra = "";
-        // Evento agotado: no queda ninguno "en venta", van todos tachados
-        if(agotado || i < idxActivo){ clase = "agotado"; tag = "Agotado"; }
-        else if(d.clave === laDet.clave){
-          clase = "activo"; tag = "En venta";
-          // El aviso va pegado a SU lote: abajo del total parecía hablar de todas las entradas
-          if(aviso) extra = `<div class="lote-aviso">${esc(aviso)}</div>`;
-        }
-        return `<div class="lote-item">
-          <div class="lote-row ${clase}"><span>${d.nombre}</span><span class="lote-precio">${fmt(d.precio)}</span><span class="lote-tag${clase==="activo"?" venta":""}">${tag}</span></div>
-          ${extra}
-        </div>`;
-      }).join("");
-    } else {
-      lotesBox.style.display = "none";
-      lotesBox.innerHTML = "";
-    }
-  }
-  // Con un solo lote no hay lista donde colgarlo, así que ahí sí va en la tarjeta
-  const avisoEl = document.getElementById("d-aviso");
-  if(avisoEl){
-    const enTarjeta = !!aviso && !listaVisible;
-    avisoEl.textContent = enTarjeta ? aviso : "";
-    avisoEl.style.display = enTarjeta ? "block" : "none";
-  }
-  const btn = document.getElementById("d-buy-btn");
-  if(agotado){ btn.textContent="Agotado"; btn.disabled=true; }
-  else {
-    btn.textContent = (USER||DEMO) ? "Comprar" : "Ingresá para comprar";
-    btn.disabled=false; btn.onclick=()=>openBuy(ev.id);
-  }
+  cur = ev;
+  SELECCION = {};
+  renderTiposDetalle(ev);
 
   go('detalle');
 }
 
+/* ================== LISTA DE TIPOS EN EL DETALLE ==================
+   Todos los tipos activos, agrupados en TICKETS y COMBOS, cada uno con su
+   propio selector de cantidad. La selección vive en SELECCION y se lleva tal
+   cual al modal de compra. */
+function renderTiposDetalle(ev){
+  const box = document.getElementById("d-tipos");
+  if(!box) return;
+  const agotado = eventoAgotado(ev);
+  const tipos = tiposALaVenta(ev);
+
+  if(!tipos.length){
+    box.innerHTML = `<p class="tipos-vacio">Todavía no hay entradas a la venta para este evento.</p>`;
+  } else {
+    box.innerHTML = CATEGORIAS.map(cat=>{
+      const delGrupo = tipos.filter(t => (t.categoria || "ticket") === cat.clave);
+      if(!delGrupo.length) return "";
+      return `<div class="tipos-grupo">
+        <h4 class="tipos-titulo">${cat.titulo}</h4>
+        ${delGrupo.map(t => filaTipoHTML(t, agotado)).join("")}
+      </div>`;
+    }).join("");
+  }
+  actualizarResumenDetalle();
+}
+function filaTipoHTML(t, eventoAgotadoYa){
+  const sinCupo = eventoAgotadoYa || tipoAgotado(t);
+  const restan = restantesTipo(t);
+  const validez = textoValidez(t);
+  const detalles = [];
+  if(t.descripcion) detalles.push(`<div class="tipo-desc">${esc(t.descripcion)}</div>`);
+  if(validez) detalles.push(`<div class="tipo-validez">🕐 ${esc(validez)}</div>`);
+  if(Number(t.accesos) > 1) detalles.push(`<div class="tipo-accesos">Entran ${Number(t.accesos)} personas</div>`);
+  if(!sinCupo && restan !== Infinity && restan <= 10) detalles.push(`<div class="tipo-quedan">Quedan ${restan}</div>`);
+
+  const elegidas = Number(SELECCION[t.id]) || 0;
+  const control = sinCupo
+    ? `<span class="tipo-tag">Agotado</span>`
+    : `<div class="qty mini">
+         <button onclick="chTipo(${t.id},-1)" aria-label="Menos">−</button>
+         <span id="qty-${t.id}">${elegidas}</span>
+         <button onclick="chTipo(${t.id},1)" aria-label="Más">+</button>
+       </div>`;
+
+  return `<div class="tipo-item${sinCupo ? " agotado" : ""}">
+    <div class="tipo-info">
+      <div class="tipo-nombre">${esc(t.nombre)}</div>
+      ${detalles.join("")}
+    </div>
+    <div class="tipo-derecha">
+      <div class="tipo-precio">${fmt(t.precio)}</div>
+      ${control}
+    </div>
+  </div>`;
+}
+function chTipo(tipoId, delta){
+  const t = (cur ? tiposALaVenta(cur) : []).find(x => x.id === tipoId);
+  if(!t) return;
+  const tope = Math.min(MAX_POR_TIPO, restantesTipo(t));
+  const nueva = Math.min(tope, Math.max(0, (Number(SELECCION[tipoId]) || 0) + delta));
+  SELECCION[tipoId] = nueva;
+  const el = document.getElementById("qty-" + tipoId);
+  if(el) el.textContent = nueva;
+  actualizarResumenDetalle();
+}
+// Los tipos elegidos, con su cantidad, en el orden en que se muestran
+function itemsSeleccionados(){
+  if(!cur) return [];
+  return tiposALaVenta(cur)
+    .map(t => ({ tipo:t, cantidad: Number(SELECCION[t.id]) || 0 }))
+    .filter(x => x.cantidad > 0);
+}
+// Una entrada de la lista por cada QR que se va a generar
+function unidadesSeleccionadas(){
+  const out = [];
+  itemsSeleccionados().forEach(({tipo, cantidad})=>{
+    for(let i = 0; i < cantidad; i++) out.push(tipo);
+  });
+  return out;
+}
+function totalesSeleccion(){
+  let entradas = 0, subtotal = 0, servicio = 0;
+  itemsSeleccionados().forEach(({tipo, cantidad})=>{
+    entradas += cantidad;
+    subtotal += (Number(tipo.precio) || 0) * cantidad;
+    servicio += servicioDe(tipo.precio) * cantidad;
+  });
+  return { entradas, subtotal, servicio, total: subtotal + servicio };
+}
+function actualizarResumenDetalle(){
+  const s = totalesSeleccion();
+  const resumen = document.getElementById("d-resumen");
+  if(resumen) resumen.style.display = s.entradas ? "block" : "none";
+  const sub = document.getElementById("d-subtotal");
+  if(sub) sub.textContent = fmt(s.subtotal);
+  const svcLabel = document.getElementById("d-serv-label");
+  // El porcentaje sale de la constante para que no se desincronice del cálculo
+  if(svcLabel) svcLabel.textContent = `Costo de servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)`;
+  const svc = document.getElementById("d-serv");
+  if(svc) svc.textContent = fmt(s.servicio);
+  const tot = document.getElementById("d-total");
+  if(tot) tot.textContent = fmt(s.total);
+
+  const btn = document.getElementById("d-buy-btn");
+  if(!btn || !cur) return;
+  if(eventoAgotado(cur)){ btn.textContent = "Agotado"; btn.disabled = true; return; }
+  if(sinVenta(cur)){ btn.textContent = "Entradas próximamente"; btn.disabled = true; return; }
+  if(!s.entradas){ btn.textContent = "Elegí tus entradas"; btn.disabled = true; return; }
+  btn.disabled = false;
+  btn.textContent = (USER || DEMO)
+    ? `Comprar ${s.entradas} ${s.entradas === 1 ? "entrada" : "entradas"} · ${fmt(s.total)}`
+    : "Ingresá para comprar";
+  btn.onclick = ()=>openBuy(cur.id);
+}
+
 /* ================== COMPRA ================== */
-let cur=null, qty=1;
 function openBuy(id){
   // Comprar requiere sesión: guardar el evento y mandar a ingresar
   if(!USER && !DEMO){
@@ -367,12 +427,12 @@ function openBuy(id){
     go('cuenta');
     return;
   }
-  cur = EVENTS.find(e=>e.id===id); qty=1;
+  cur = EVENTS.find(e=>e.id===id);
+  if(!cur || !totalesSeleccion().entradas) return;
   document.getElementById("m-title").textContent = cur.nombre;
   document.getElementById("m-date").textContent = cur.fecha_texto + " · " + cur.lugar;
-  document.getElementById("qty").textContent = 1;
   document.getElementById("buy-err").style.display="none";
-  renderAttendees(); updTotal();
+  renderResumenCompra(); renderAttendees(); updTotal();
   // Autocompletar con los datos del usuario logueado
   if(USER){
     const fila1 = document.querySelector("#attendees .attendee-row");
@@ -388,39 +448,68 @@ function openBuy(id){
   document.getElementById("modal-done").style.display="none";
   document.getElementById("overlay").classList.add("open");
 }
-function chQty(d){ qty=Math.min(10,Math.max(1,qty+d)); document.getElementById("qty").textContent=qty; renderAttendees(); updTotal(); }
+// Qué se está comprando: "2x GENERAL 1"
+function renderResumenCompra(){
+  const box = document.getElementById("m-resumen");
+  if(!box) return;
+  box.innerHTML = itemsSeleccionados().map(({tipo, cantidad})=>`
+    <div class="compra-item">
+      <span>${cantidad}× ${esc(tipo.nombre)}</span>
+      <b>${fmt((Number(tipo.precio)||0) * cantidad)}</b>
+    </div>`).join("");
+}
+/* Una fila por QR. Cada fila recuerda de qué tipo es, porque una misma compra
+   puede mezclar tipos distintos y cada entrada se emite con el suyo. */
 function renderAttendees(){
   const box = document.getElementById("attendees");
   const prev = [...box.querySelectorAll(".attendee-row")].map(r=>({n:r.querySelector(".a-nombre").value,a:r.querySelector(".a-apellido").value}));
   box.innerHTML = "";
-  for(let i=0;i<qty;i++){
+  unidadesSeleccionadas().forEach((tipo, i)=>{
     const row = document.createElement("div");
     row.className = "attendee-row";
+    row.dataset.tipo = tipo.id;
     row.innerHTML = `<span class="num">${i+1}</span>
-      <input class="a-nombre" placeholder="Nombre" value="${prev[i]?esc(prev[i].n):''}">
-      <input class="a-apellido" placeholder="Apellido" value="${prev[i]?esc(prev[i].a):''}">`;
+      <div class="attendee-campos">
+        <span class="attendee-tipo">${esc(tipo.nombre)}</span>
+        <div class="attendee-inputs">
+          <input class="a-nombre" placeholder="Nombre" value="${prev[i]?esc(prev[i].n):''}">
+          <input class="a-apellido" placeholder="Apellido" value="${prev[i]?esc(prev[i].a):''}">
+        </div>
+      </div>`;
     box.appendChild(row);
-  }
+  });
 }
-function precioActual(){ return cur ? loteActivo(cur).precio : 0; }
-function servicioPorEntrada(){ return Math.round(precioActual() * SERVICIO_PCT); }
 function updTotal(){
-  const p = precioActual();
-  const s = servicioPorEntrada();
-  document.getElementById("sub-label").textContent = `Entradas (${qty} × ${fmt(p)})`;
-  document.getElementById("subtotal").textContent = fmt(p * qty);
+  const s = totalesSeleccion();
+  document.getElementById("sub-label").textContent = `Entradas (${s.entradas})`;
+  document.getElementById("subtotal").textContent = fmt(s.subtotal);
   // El porcentaje sale de la constante para que no se desincronice del cálculo
   const svcLabel = document.getElementById("serv-label");
   if(svcLabel) svcLabel.textContent = `Costo de servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)`;
-  document.getElementById("serv-total").textContent = fmt(s * qty);
+  document.getElementById("serv-total").textContent = fmt(s.servicio);
   document.getElementById("total-label").textContent = "Total";
-  document.getElementById("total").textContent = fmt((p + s) * qty);
+  document.getElementById("total").textContent = fmt(s.total);
 }
 async function confirmBuy(){
   const errEl = document.getElementById("buy-err");
+  const unidades = unidadesSeleccionadas();
   const rows = [...document.querySelectorAll("#attendees .attendee-row")];
-  const asistentes = rows.map(r=>({nombre:r.querySelector(".a-nombre").value.trim(), apellido:r.querySelector(".a-apellido").value.trim()}));
+  const asistentes = rows.map((r,i)=>{
+    const tipo = unidades[i];
+    return {
+      nombre: r.querySelector(".a-nombre").value.trim(),
+      apellido: r.querySelector(".a-apellido").value.trim(),
+      tipo_ticket_id: tipo.id,
+      tipo: tipo.nombre,
+      accesos: Number(tipo.accesos) || 1,
+      precio: Number(tipo.precio) || 0,
+      servicio: servicioDe(tipo.precio)
+    };
+  });
   const email = document.getElementById("f-email").value.trim();
+  if(!asistentes.length){
+    errEl.textContent="Elegí al menos una entrada"; errEl.style.display="block"; return;
+  }
   if(asistentes.some(a=>!a.nombre || !a.apellido)){
     errEl.textContent="Completá nombre y apellido de cada entrada"; errEl.style.display="block"; return;
   }
@@ -431,14 +520,16 @@ async function confirmBuy(){
 
   const btn = document.getElementById("btn-confirm");
   btn.disabled=true; btn.textContent="Redirigiendo al pago...";
+  const s = totalesSeleccion();
 
   // MODO DEMO: sin Supabase, simula la compra sin pago real
   if(DEMO){
-    const grupo = "TP-" + Math.random().toString(36).slice(2,8).toUpperCase();
+    const grupo = "BX-" + Math.random().toString(36).slice(2,8).toUpperCase();
     const entradas = asistentes.map((a,i)=>({
-      nombre:a.nombre, apellido:a.apellido, email, evento:cur.nombre,
-      fecha_texto:cur.fecha_texto, lugar:cur.lugar, tipo:loteActivo(cur).nombre,
-      cantidad:1, total:precioActual(), codigo:grupo+"-"+(i+1), estado:"aprobado"
+      nombre:a.nombre, apellido:a.apellido, email, evento:cur.nombre, evento_id:cur.id,
+      fecha_texto:cur.fecha_texto, lugar:cur.lugar,
+      tipo:a.tipo, tipo_ticket_id:a.tipo_ticket_id, accesos:a.accesos,
+      grupo, total:a.precio + a.servicio, codigo:grupo+"-"+(i+1), estado:"aprobado"
     }));
     entradas.forEach(e=>{DEMO_PURCHASES.push(e); MY_TICKETS.push(e);});
     updBadge();
@@ -450,18 +541,33 @@ async function confirmBuy(){
     return;
   }
 
-  // REAL: llamar a la Edge Function crear-pago y redirigir a Mercado Pago
+  /* REAL: la Edge Function crear-pago arma la preferencia de Mercado Pago y
+     crea una fila en compras por asistente (con service_role, por eso el
+     navegador no inserta nada). Contrato que espera recibir:
+       { evento, evento_id, fecha_texto, lugar, email,
+         items: [{tipo_ticket_id, nombre, precio, servicio, cantidad}],
+         asistentes: [{nombre, apellido, tipo_ticket_id, tipo, accesos, precio, servicio}],
+         total }
+     El precio de cada entrada es precio + servicio. */
   try{
     const r = await fetch(`${SUPABASE_URL}/functions/v1/crear-pago`, {
       method:"POST",
       headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+SUPABASE_KEY, "Content-Type":"application/json" },
       body: JSON.stringify({
         evento: cur.nombre,
+        evento_id: cur.id,
         fecha_texto: cur.fecha_texto,
-        precio: precioActual() + servicioPorEntrada(),  // entrada + costo de servicio
-        lote: loteActivo(cur).nombre,
+        lugar: cur.lugar,
+        email: email,
+        items: itemsSeleccionados().map(({tipo, cantidad})=>({
+          tipo_ticket_id: tipo.id,
+          nombre: tipo.nombre,
+          precio: Number(tipo.precio) || 0,
+          servicio: servicioDe(tipo.precio),
+          cantidad
+        })),
         asistentes: asistentes,
-        email: email
+        total: s.total
       })
     });
     const data = await r.json();
@@ -492,7 +598,7 @@ function ticketHTML(c){
     <div class="row"><span>Entrada</span><span>${esc(c.tipo)}</span></div>
     <div class="row"><span>Código</span><span>${esc(c.codigo)}</span></div>
     <div class="qr-real" id="${qrId}" data-code="${esc(c.codigo)}"></div>
-    <p class="confirm-note">Mostrá este QR en la puerta · Torinos Producciones</p>
+    <p class="confirm-note">Mostrá este QR en la puerta · Bronx Social Club</p>
     <button class="btn" style="display:block;width:100%;margin-top:14px" onclick="descargarQR('${qrId}','${esc(c.codigo)}')">Descargar QR</button>
   </div>`;
 }
@@ -520,11 +626,11 @@ async function descargarQR(qrId, codigo){
   ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,W,H);
   // Banda superior negra
   ctx.fillStyle = "#000000"; ctx.fillRect(0,0,W,140);
-  ctx.fillStyle = "#e10600"; ctx.fillRect(0,140,W,8);
+  ctx.fillStyle = "#F58C29"; ctx.fillRect(0,140,W,8);
   // Título
   ctx.fillStyle = "#ffffff"; ctx.textAlign = "center";
   ctx.font = "bold 34px Arial";
-  ctx.fillText("TORINOS ● PRODUCCIONES", W/2, 85);
+  ctx.fillText("BRONX SOCIAL CLUB", W/2, 85);
 
   // Datos
   ctx.fillStyle = "#000000"; ctx.textAlign = "left";
@@ -546,7 +652,7 @@ async function descargarQR(qrId, codigo){
     const qs = 300;
     ctx.drawImage(qrImg, (W-qs)/2, 640, qs, qs);
     ctx.fillStyle = "#777"; ctx.textAlign="center"; ctx.font="16px Arial";
-    ctx.fillText("Mostrá este QR en la puerta · Torinos Producciones", W/2, 980);
+    ctx.fillText("Mostrá este QR en la puerta · Bronx Social Club", W/2, 980);
     // Descargar
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
@@ -703,9 +809,13 @@ async function abrirPanel(){
   document.getElementById("admin-panel").style.display="block";
   initColapsables();
   aplicarRol();
-  // Esperamos las compras: renderEventAdmin necesita los conteos por lote
+  // Esperamos las compras: renderEventAdmin necesita los conteos por tipo
   await loadPurchases();
-  if(ROL==="admin"){ renderEventAdmin(); loadUsuarios(); loadPasadosAdmin(); loadStaff(); }
+  if(ROL==="admin"){
+    await cargarTipos(true);   // el panel también edita los tipos pausados
+    renderTiposForm();
+    renderEventAdmin(); loadUsuarios(); loadPasadosAdmin(); loadStaff();
+  }
 }
 
 async function login(){
@@ -784,59 +894,194 @@ async function restoreAdminSession(){
 // [restoreAdminSession(); -> ahora se llama desde initPage()]
 
 /* ================== ADMIN: EVENTOS ================== */
-// Los ids de los inputs de precio vienen de antes y no son uniformes (ev-lote-eb
-// pero ev-lote-1), así que el mapa evita repetirlos en cada función.
-const LOTE_INPUTS = {
-  eb: { precio:"ev-lote-eb", cantidad:"ev-cant-eb", aviso:"ev-aviso-eb", vendidas:"ev-vend-eb" },
-  l1: { precio:"ev-lote-1",  cantidad:"ev-cant-l1", aviso:"ev-aviso-l1", vendidas:"ev-vend-l1" },
-  l2: { precio:"ev-lote-2",  cantidad:"ev-cant-l2", aviso:"ev-aviso-l2", vendidas:"ev-vend-l2" },
-  l3: { precio:"ev-lote-3",  cantidad:"ev-cant-l3", aviso:"ev-aviso-l3", vendidas:"ev-vend-l3" }
-};
-// Arma el jsonb de lotes con el formato nuevo {precio, cantidad, aviso}
-function lotesDesdeForm(){
-  const out = {};
-  ORDEN_LOTES.forEach(k=>{
-    const io = LOTE_INPUTS[k];
-    const precio = parseInt(document.getElementById(io.precio).value,10) || 0;
-    if(!precio){ out[k] = null; return; }
-    const c = document.getElementById(io.cantidad).value.trim();
-    out[k] = {
-      precio,
-      cantidad: c === "" ? null : (parseInt(c,10) || 0),
-      aviso: document.getElementById(io.aviso).value.trim()
-    };
-  });
-  return out;
-}
 function renderEventAdmin(){
   const list = document.getElementById("ev-admin-list");
   const aviso = (!DEMO && !VENTAS_VISTA_OK)
-    ? `<p class="err" style="display:block;margin-bottom:14px">⚠️ Falta crear la vista <b>ventas_por_lote</b> en Supabase. Los números de acá abajo son correctos, pero en la página pública los lotes no van a avanzar solos hasta que la crees.</p>`
+    ? `<p class="err" style="display:block;margin-bottom:14px">⚠️ Falta crear la vista <b>ventas_por_tipo</b> en Supabase (sql/03-vistas.sql). Los números de acá abajo son correctos, pero en la página pública los cupos no se van a cerrar solos hasta que la crees.</p>`
     : "";
   if(EVENTS.length===0){ list.innerHTML = aviso + `<p style="color:var(--dim);font-size:14px">No hay eventos. Creá el primero abajo.</p>`; return; }
   list.innerHTML = aviso + EVENTS.map(ev=>{
-    const la = loteActivo(ev);
-    const ventas = ventasDeEvento(ev.nombre);
-    const defs = lotesDefinidos(ev);
-    // Vendidas sobre el cupo de cada lote, ej: "Early Bird 38/50"
-    const detalleVentas = defs.length
-      ? defs.map(d=>{
-          const v = Number(ventas[d.nombre]) || 0;
-          return `${d.nombre} ${v}${d.cantidad != null ? "/" + d.cantidad : ""}`;
+    const tipos = tiposDeEvento(ev.id);
+    const desde = precioDesde(ev);
+    // Vendidas sobre el cupo de cada tipo, ej: "GENERAL 1 38/50"
+    const detalleVentas = tipos.length
+      ? tipos.map(t=>{
+          const v = vendidasTipo(t);
+          return `${esc(t.nombre)} ${v}${t.cantidad != null ? "/" + t.cantidad : ""}${t.activo ? "" : " (pausado)"}`;
         }).join(" · ")
-      : `General: ${Number(ventas["General"]) || 0}`;
+      : "sin tipos de entrada cargados";
     return `
     <div class="ev-admin-item">
       <div class="info">
         <b>${esc(ev.nombre)}</b> ${ev.pasado?'<span class="pill" style="border-color:var(--dim);color:var(--dim)">PASADO</span>':''}
-        <span>${esc(ev.fecha_texto)} · A la venta: <b style="color:var(--red-soft)">${la.nombre} ${fmt(la.precio)}</b> ${eventoAgotado(ev)?'· AGOTADO':''} ${ev.ubicacion_secreta?'· 📍 secreta':''}</span>
-        <span class="lote-counts">Vendidas → ${detalleVentas}</span>
+        <span>${esc(ev.fecha_texto)} · ${tipos.length} tipo(s) ${desde != null ? `· desde <b style="color:var(--red-soft)">${fmt(desde)}</b>` : ""} ${eventoAgotado(ev)?'· AGOTADO':''} ${ev.ubicacion_secreta?'· 📍 secreta':''}</span>
+        <span class="tipo-counts">Vendidas → ${detalleVentas}</span>
       </div>
       <div class="row-actions">
         <button class="btn ghost" onclick="editEvento(${ev.id})">Editar</button>
         <button class="btn ghost" onclick="deleteEvento(${ev.id})">Borrar</button>
       </div>
     </div>`;}).join("");
+}
+
+/* ---------- Gestor de tipos de entrada ----------
+   Los tipos se editan en memoria mientras se completa el formulario y recién
+   se guardan cuando se guarda el evento. Así un evento nuevo (que todavía no
+   tiene id) puede nacer con sus entradas ya cargadas. */
+let TIPOS_FORM = [];      // los tipos del evento que se está editando
+let TIPOS_BORRADOS = [];  // ids que hay que borrar al guardar
+
+function tipoVacio(categoria){
+  return { id:null, nombre:"", descripcion:"", precio:"", cantidad:"",
+           categoria: categoria || "ticket", accesos:1, activo:true,
+           valido_desde:"", valido_hasta:"" };
+}
+function agregarTipo(categoria){
+  TIPOS_FORM.push(tipoVacio(categoria));
+  renderTiposForm();
+  // El que se acaba de agregar es el que se va a completar
+  const inputs = document.querySelectorAll("#tipos-list .tipo-form-nombre");
+  const ultimo = inputs[inputs.length-1];
+  if(ultimo) ultimo.focus();
+}
+// Los inputs escriben directo en el array: si re-renderizáramos en cada tecla
+// se perdería el foco a mitad de palabra.
+function setTipoCampo(i, campo, valor){
+  if(TIPOS_FORM[i]) TIPOS_FORM[i][campo] = valor;
+}
+function moverTipo(i, d){
+  const j = i + d;
+  if(j < 0 || j >= TIPOS_FORM.length) return;
+  [TIPOS_FORM[i], TIPOS_FORM[j]] = [TIPOS_FORM[j], TIPOS_FORM[i]];
+  renderTiposForm();
+}
+function borrarTipo(i){
+  const t = TIPOS_FORM[i];
+  if(!t) return;
+  const vendidas = t.id ? (Number(VENTAS_TIPO[t.id]) || 0) : 0;
+  const aviso = vendidas
+    ? `Ya se vendieron ${vendidas} entrada(s) de "${t.nombre}". Si lo borrás, esas entradas siguen siendo válidas pero se quedan sin tipo asociado.\n\n¿Borrar igual?`
+    : `¿Borrar el tipo "${t.nombre || "sin nombre"}"?`;
+  if(!confirm(aviso)) return;
+  if(t.id) TIPOS_BORRADOS.push(t.id);
+  TIPOS_FORM.splice(i, 1);
+  renderTiposForm();
+}
+function renderTiposForm(){
+  const box = document.getElementById("tipos-list");
+  if(!box) return;
+  if(!TIPOS_FORM.length){
+    box.innerHTML = `<p style="color:var(--dim);font-size:13px;margin-bottom:12px">Todavía no cargaste ningún tipo de entrada. Sin al menos uno, el evento se anuncia pero no se puede comprar.</p>`;
+    return;
+  }
+  box.innerHTML = TIPOS_FORM.map((t,i)=>{
+    const vendidas = t.id ? (Number(VENTAS_TIPO[t.id]) || 0) : 0;
+    const cupo = (t.cantidad === "" || t.cantidad == null) ? null : Number(t.cantidad);
+    return `
+    <div class="tipo-form${t.activo === false ? " pausado" : ""}">
+      <div class="tipo-form-head">
+        <span class="tipo-form-num">${i+1}</span>
+        <input class="tipo-form-nombre" placeholder="Nombre (ej: GENERAL 1)" value="${esc(t.nombre)}"
+               oninput="setTipoCampo(${i},'nombre',this.value)">
+        <div class="tipo-form-acciones">
+          <button class="btn ghost btn-mini" onclick="moverTipo(${i},-1)" title="Subir" ${i===0?"disabled":""}>↑</button>
+          <button class="btn ghost btn-mini" onclick="moverTipo(${i},1)" title="Bajar" ${i===TIPOS_FORM.length-1?"disabled":""}>↓</button>
+          <button class="btn ghost btn-mini" onclick="borrarTipo(${i})" title="Borrar">✕</button>
+        </div>
+      </div>
+      <input class="tipo-form-desc" placeholder="Descripción (ej: Acceso exclusivo terrazas. Barra libre.)" value="${esc(t.descripcion)}"
+             oninput="setTipoCampo(${i},'descripcion',this.value)">
+      <div class="tipo-form-grid">
+        <label>Precio $
+          <input type="number" min="1" placeholder="8000" value="${t.precio === "" || t.precio == null ? "" : t.precio}"
+                 oninput="setTipoCampo(${i},'precio',this.value)">
+        </label>
+        <label>Cupo (vacío = sin límite)
+          <input type="number" min="0" placeholder="sin límite" value="${cupo == null ? "" : cupo}"
+                 oninput="setTipoCampo(${i},'cantidad',this.value)">
+        </label>
+        <label>Sección
+          <select onchange="setTipoCampo(${i},'categoria',this.value)">
+            <option value="ticket"${t.categoria!=="combo"?" selected":""}>Tickets</option>
+            <option value="combo"${t.categoria==="combo"?" selected":""}>Combos</option>
+          </select>
+        </label>
+        <label>Accesos (personas)
+          <input type="number" min="1" value="${Number(t.accesos)||1}"
+                 oninput="setTipoCampo(${i},'accesos',this.value)">
+        </label>
+        <label>Válido desde
+          <input placeholder="23:30" value="${esc(t.valido_desde)}"
+                 oninput="setTipoCampo(${i},'valido_desde',this.value)">
+        </label>
+        <label>Válido hasta
+          <input placeholder="02:00" value="${esc(t.valido_hasta)}"
+                 oninput="setTipoCampo(${i},'valido_hasta',this.value)">
+        </label>
+      </div>
+      <div class="tipo-form-pie">
+        <label class="tipo-form-check">
+          <input type="checkbox" ${t.activo === false ? "" : "checked"} onchange="setTipoCampo(${i},'activo',this.checked)">
+          A la venta
+        </label>
+        ${t.id ? `<span class="tipo-form-vendidas">Vendidas: ${vendidas}${cupo != null ? "/" + cupo : ""}</span>` : `<span class="tipo-form-vendidas">Nuevo</span>`}
+      </div>
+    </div>`;
+  }).join("");
+}
+// Convierte una fila del formulario en la fila que espera la base
+function tipoDesdeForm(t, eventoId, orden){
+  return {
+    evento_id: Number(eventoId),
+    nombre: t.nombre.trim(),
+    descripcion: (t.descripcion || "").trim() || null,
+    precio: parseInt(t.precio,10) || 0,
+    cantidad: (t.cantidad === "" || t.cantidad == null) ? null : (parseInt(t.cantidad,10) || 0),
+    orden,
+    categoria: t.categoria === "combo" ? "combo" : "ticket",
+    accesos: Math.max(1, parseInt(t.accesos,10) || 1),
+    activo: t.activo !== false,
+    valido_desde: (t.valido_desde || "").trim() || null,
+    valido_hasta: (t.valido_hasta || "").trim() || null
+  };
+}
+/* Guarda los tipos del evento: borra los que se sacaron, actualiza los que ya
+   existían y da de alta los nuevos. El orden en pantalla es el campo "orden". */
+async function sincronizarTipos(eventoId){
+  for(const id of TIPOS_BORRADOS){ await dbDelete("tipos_ticket", id); }
+  TIPOS_BORRADOS = [];
+  for(let i = 0; i < TIPOS_FORM.length; i++){
+    const t = TIPOS_FORM[i];
+    const fila = tipoDesdeForm(t, eventoId, i);
+    if(t.id) await dbUpdate("tipos_ticket", t.id, fila);
+    else {
+      const creado = await dbInsert("tipos_ticket", fila);
+      if(creado && creado[0]) t.id = creado[0].id;
+    }
+  }
+}
+// Lo mismo pero en memoria, para poder probar el panel sin Supabase
+function sincronizarTiposDemo(eventoId){
+  const otros = DEMO_TIPOS.filter(t => t.evento_id != eventoId);
+  DEMO_TIPOS.length = 0;
+  DEMO_TIPOS.push(...otros);
+  TIPOS_FORM.forEach((t,i)=>{
+    if(!t.id) t.id = Date.now() + i;
+    DEMO_TIPOS.push({ ...tipoDesdeForm(t, eventoId, i), id: t.id, oculto: false });
+  });
+  TIPOS_BORRADOS = [];
+  agruparTipos(DEMO_TIPOS);
+}
+// Devuelve el primer problema encontrado, o "" si está todo bien
+function validarTipos(){
+  for(const t of TIPOS_FORM){
+    if(!t.nombre.trim()) return "Todos los tipos de entrada necesitan un nombre.";
+    const precio = parseInt(t.precio,10) || 0;
+    // Las entradas gratis todavía no saltean Mercado Pago: si dejamos pasar un
+    // $0, el comprador llega al pago con un total inválido.
+    if(precio <= 0) return `Poné un precio mayor a 0 en "${t.nombre.trim()}". Las entradas gratis todavía no están implementadas.`;
+  }
+  return "";
 }
 function toggleSecreta(){
   document.getElementById("dir-fields").style.display = document.getElementById("ev-secreta").checked ? "none" : "block";
@@ -847,17 +1092,11 @@ function previewFoto(){
   if(f){ img.src = URL.createObjectURL(f); img.style.display="block"; }
 }
 function resetEventoForm(){
-  ["ev-id","ev-nombre","ev-fecha","ev-puertas","ev-precio","ev-lugar","ev-desc","ev-direccion","ev-foto-url"].forEach(id=>document.getElementById(id).value="");
+  ["ev-id","ev-nombre","ev-fecha","ev-puertas","ev-lugar","ev-desc","ev-direccion","ev-foto-url"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("ev-secreta").checked=false;
   document.getElementById("ev-agotado").checked=false;
-  ORDEN_LOTES.forEach(k=>{
-    const io = LOTE_INPUTS[k];
-    document.getElementById(io.precio).value="";
-    document.getElementById(io.cantidad).value="";
-    document.getElementById(io.aviso).value="";
-    document.getElementById(io.vendidas).textContent="";
-  });
-  document.getElementById("ev-lote-activo").value="general";
+  TIPOS_FORM = []; TIPOS_BORRADOS = [];
+  renderTiposForm();
   document.getElementById("ev-foto").value="";
   document.getElementById("ev-thumb").style.display="none";
   document.getElementById("form-title").textContent="Nuevo evento";
@@ -872,25 +1111,27 @@ function editEvento(id){
   document.getElementById("ev-nombre").value = ev.nombre||"";
   document.getElementById("ev-fecha").value = ev.fecha_texto||"";
   document.getElementById("ev-puertas").value = ev.puertas||"";
-  document.getElementById("ev-precio").value = ev.precio_general||"";
   document.getElementById("ev-lugar").value = ev.lugar||"";
   document.getElementById("ev-desc").value = ev.descripcion||"";
   document.getElementById("ev-direccion").value = ev.direccion||"";
   document.getElementById("ev-foto-url").value = ev.foto_url||"";
   document.getElementById("ev-secreta").checked = !!ev.ubicacion_secreta;
   document.getElementById("ev-agotado").checked = !!ev.agotado;
-  // Precio + cupo de cada lote, y cuántas se vendieron de cada uno
-  const ventasEv = ventasDeEvento(ev.nombre);
-  ORDEN_LOTES.forEach(k=>{
-    const io = LOTE_INPUTS[k], info = loteInfo(ev.lotes, k);
-    document.getElementById(io.precio).value = info ? info.precio : "";
-    document.getElementById(io.cantidad).value = (info && info.cantidad != null) ? info.cantidad : "";
-    document.getElementById(io.aviso).value = info ? (info.aviso || "") : "";
-    const v = Number(ventasEv[LOTE_NOMBRES[k]]) || 0;
-    document.getElementById(io.vendidas).textContent =
-      info ? `Vendidas: ${v}${info.cantidad != null ? "/" + info.cantidad : ""}` : "";
-  });
-  document.getElementById("ev-lote-activo").value = ev.lote_activo || "general";
+  // Copia editable de los tipos: hasta que no se guarda, no se toca la base
+  TIPOS_FORM = tiposDeEvento(ev.id).map(t=>({
+    id: t.id,
+    nombre: t.nombre || "",
+    descripcion: t.descripcion || "",
+    precio: t.precio,
+    cantidad: t.cantidad == null ? "" : t.cantidad,
+    categoria: t.categoria || "ticket",
+    accesos: Number(t.accesos) || 1,
+    activo: t.activo !== false,
+    valido_desde: t.valido_desde || "",
+    valido_hasta: t.valido_hasta || ""
+  }));
+  TIPOS_BORRADOS = [];
+  renderTiposForm();
   const img = document.getElementById("ev-thumb");
   if(ev.foto_url){ img.src=ev.foto_url; img.style.display="block"; } else img.style.display="none";
   document.getElementById("form-title").textContent = "Editar: " + ev.nombre;
@@ -903,8 +1144,9 @@ async function saveEvento(){
   const ok = document.getElementById("ev-ok");
   err.style.display="none"; ok.style.display="none";
   const nombre = document.getElementById("ev-nombre").value.trim();
-  const precio = parseInt(document.getElementById("ev-precio").value,10);
-  if(!nombre || !precio){ err.textContent="Completá al menos nombre y precio."; err.style.display="block"; return; }
+  if(!nombre){ err.textContent="Completá al menos el nombre del evento."; err.style.display="block"; return; }
+  const problema = validarTipos();
+  if(problema){ err.textContent = problema; err.style.display="block"; return; }
 
   const btn = document.getElementById("ev-save-btn");
   btn.disabled=true; const prevTxt=btn.textContent; btn.textContent="Guardando...";
@@ -917,27 +1159,33 @@ async function saveEvento(){
       nombre,
       fecha_texto: document.getElementById("ev-fecha").value.trim(),
       puertas: document.getElementById("ev-puertas").value.trim(),
-      precio_general: precio,
       lugar: document.getElementById("ev-lugar").value.trim(),
       descripcion: document.getElementById("ev-desc").value.trim(),
       direccion: secreta ? null : document.getElementById("ev-direccion").value.trim(),
       ubicacion_secreta: secreta,
       agotado: document.getElementById("ev-agotado").checked,
-      lotes: lotesDesdeForm(),
-      lote_activo: document.getElementById("ev-lote-activo").value,
       foto_url: fotoUrl,
       arte: "red"
     };
     const id = document.getElementById("ev-id").value;
     const nombreViejo = id ? (EVENTS.find(e=>e.id==id)||{}).nombre : null;
     if(DEMO){
+      let eventoId = id;
       if(id){ Object.assign(EVENTS.find(e=>e.id==id), data); }
-      else { data.id = Date.now(); data.activo=true; EVENTS.push(data); }
+      else { data.id = Date.now(); data.activo=true; EVENTS.push(data); eventoId = data.id; }
+      sincronizarTiposDemo(eventoId);
     } else {
+      // Los tipos necesitan el id del evento, así que el evento se guarda primero
+      let eventoId = id;
       if(id){ await dbUpdate("eventos", id, data); }
-      else { await dbInsert("eventos", data); }
+      else {
+        const creado = await dbInsert("eventos", data);
+        eventoId = creado && creado[0] ? creado[0].id : null;
+      }
+      if(eventoId) await sincronizarTipos(eventoId);
       if(nombreViejo && nombreViejo !== nombre) await renombrarCompras(nombreViejo, nombre);
       EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
+      await cargarTipos(true);
     }
     ok.textContent = id ? "✅ Evento actualizado." : "✅ Evento creado."; ok.style.display="block";
     resetEventoForm(); renderEventAdmin(); loadEvents();
@@ -946,14 +1194,14 @@ async function saveEvento(){
   }
   btn.disabled=false; btn.textContent=prevTxt;
 }
-/* compras.evento guarda el NOMBRE del evento, no el id. Si le cambiás el nombre
-   al evento, las compras viejas quedan colgadas del nombre anterior: el conteo
-   por lote vuelve a cero y el precio baja al primer lote. Así que al renombrar
-   reetiquetamos las compras para que sigan contando. */
+/* compras.evento guarda el NOMBRE del evento además del id. Si le cambiás el
+   nombre, las compras viejas siguen mostrando el anterior en el panel, en el
+   CSV y en el filtro por evento. Los conteos de cupo no se rompen (van por
+   tipo_ticket_id), pero la lista queda partida en dos. */
 async function renombrarCompras(viejo, nuevo){
   const afectadas = PURCHASES.filter(c => c.evento === viejo).length;
   if(!afectadas) return;
-  if(!confirm(`Le cambiaste el nombre al evento: "${viejo}" → "${nuevo}".\n\nHay ${afectadas} compra(s) guardadas con el nombre viejo. Si no se actualizan, el conteo de lotes arranca de cero y el precio vuelve al primer lote.\n\n¿Actualizarlas al nombre nuevo? (recomendado)`)) return;
+  if(!confirm(`Le cambiaste el nombre al evento: "${viejo}" → "${nuevo}".\n\nHay ${afectadas} compra(s) guardadas con el nombre viejo, y en el panel van a figurar como si fueran de otro evento.\n\n¿Actualizarlas al nombre nuevo? (recomendado)`)) return;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/compras?evento=eq.${encodeURIComponent(viejo)}`, {
     method:"PATCH", headers: authHeaders({"Prefer":"return=minimal"}),
     body: JSON.stringify({ evento: nuevo })
@@ -970,7 +1218,11 @@ async function deleteEvento(id){
   if(!confirm(`¿Borrar el evento "${ev.nombre}"? Esta acción no se puede deshacer.`)) return;
   try{
     if(DEMO){ EVENTS = EVENTS.filter(e=>e.id!==id); }
-    else { await dbDelete("eventos", id); EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado); }
+    else {
+      await dbDelete("eventos", id);   // los tipos_ticket se van con él (FK on delete cascade)
+      EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
+      await cargarTipos(true);
+    }
     renderEventAdmin(); loadEvents();
   }catch(e){ alert("No se pudo borrar: " + e.message); }
 }
@@ -983,9 +1235,9 @@ async function loadPurchases(){
     document.getElementById("tbody").innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:28px">Error cargando compras. Revisá Supabase.</td></tr>`;
     return;
   }
-  // En el admin tenemos las compras completas: los conteos por lote salen de acá
+  // En el admin tenemos las compras completas: los conteos por tipo salen de acá
   // y no de la vista, así los números son exactos aunque la vista no exista.
-  VENTAS_LOTE = ventasLoteDesdePurchases();
+  VENTAS_TIPO = ventasTipoDesdePurchases();
   // Poblar los filtros con lo que realmente existe en las compras
   const sel = document.getElementById("f-evento");
   if(sel){
@@ -993,11 +1245,11 @@ async function loadPurchases(){
     const evs = [...new Set(PURCHASES.map(c=>c.evento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
     sel.innerHTML = `<option value="">Todos los eventos</option>` + evs.map(e=>`<option value="${esc(e)}"${e===actual?" selected":""}>${esc(e)}</option>`).join("");
   }
-  const selLote = document.getElementById("f-lote");
-  if(selLote){
-    const actual = selLote.value;
-    const tipos = [...new Set(PURCHASES.map(c=>c.tipo||"General"))].sort((a,b)=> ordenTipo(a)-ordenTipo(b) || a.localeCompare(b,"es"));
-    selLote.innerHTML = `<option value="">Todos los lotes</option>` + tipos.map(t=>`<option value="${esc(t)}"${t===actual?" selected":""}>${esc(t)}</option>`).join("");
+  const selTipo = document.getElementById("f-tipo");
+  if(selTipo){
+    const actual = selTipo.value;
+    const tipos = [...new Set(PURCHASES.map(nombreTipo))].sort((a,b)=> a.localeCompare(b,"es"));
+    selTipo.innerHTML = `<option value="">Todos los tipos</option>` + tipos.map(t=>`<option value="${esc(t)}"${t===actual?" selected":""}>${esc(t)}</option>`).join("");
   }
   drawAdmin();
 }
@@ -1008,14 +1260,13 @@ function estadoPill(estado){
   return '<span class="pill" style="border-color:#eab308;color:#eab308">Pendiente</span>';
 }
 const esAprobada = c => (c.estado||"").toLowerCase() === "aprobado";
-// Los lotes primero y en orden, después General, y al final cualquier otro
-const ORDEN_TIPOS = [...ORDEN_LOTES.map(k=>LOTE_NOMBRES[k]), "General"];
-function ordenTipo(t){ const i = ORDEN_TIPOS.indexOf(t); return i < 0 ? 99 : i; }
+// El tipo de ticket con el que se emitió la entrada; las viejas sin tipo caen acá
+const nombreTipo = c => c.tipo || "Sin tipo";
 
 function filasFiltradas(){
   const q = (document.getElementById("filtro")?.value||"").trim().toLowerCase();
   const fEv  = (document.getElementById("f-evento")?.value)||"";
-  const fLot = (document.getElementById("f-lote")?.value)||"";
+  const fTip = (document.getElementById("f-tipo")?.value)||"";
   const fEst = (document.getElementById("f-estado")?.value)||"";
   const fIng = (document.getElementById("f-ingreso")?.value)||"";
   const fOrd = (document.getElementById("f-orden")?.value)||"recientes";
@@ -1024,7 +1275,7 @@ function filasFiltradas(){
   if(q) rows = rows.filter(c =>
     `${c.nombre||""} ${c.apellido||""} ${c.email||""} ${c.codigo||""}`.toLowerCase().includes(q));
   if(fEv)  rows = rows.filter(c => c.evento === fEv);
-  if(fLot) rows = rows.filter(c => (c.tipo || "General") === fLot);
+  if(fTip) rows = rows.filter(c => nombreTipo(c) === fTip);
   if(fEst) rows = rows.filter(c => (c.estado||"pendiente").toLowerCase() === fEst);
   if(fIng) rows = rows.filter(c => fIng === "si" ? !!c.usada : !c.usada);
 
@@ -1033,11 +1284,11 @@ function filasFiltradas(){
   if(fOrd==="nombre")    rows.sort((a,b)=> (a.nombre+" "+a.apellido).localeCompare(b.nombre+" "+b.apellido, "es"));
   if(fOrd==="total")     rows.sort((a,b)=> Number(b.total||0) - Number(a.total||0));
   if(fOrd==="evento")    rows.sort((a,b)=> (a.evento||"").localeCompare(b.evento||"", "es"));
-  if(fOrd==="lote")      rows.sort((a,b)=> ordenTipo(a.tipo||"General") - ordenTipo(b.tipo||"General"));
+  if(fOrd==="tipo")      rows.sort((a,b)=> nombreTipo(a).localeCompare(nombreTipo(b), "es"));
   return rows;
 }
 function limpiarFiltros(){
-  ["filtro","f-evento","f-lote","f-estado","f-ingreso"].forEach(id=>{
+  ["filtro","f-evento","f-tipo","f-estado","f-ingreso"].forEach(id=>{
     const el = document.getElementById(id); if(el) el.value = "";
   });
   const o = document.getElementById("f-orden"); if(o) o.value = "recientes";
@@ -1055,16 +1306,16 @@ function totales(rows){
     ingresados: ap.filter(c => c.usada).length
   };
 }
-// Desglose por lote de las filas visibles
-function dibujarResumenLotes(rows){
-  const tb = document.getElementById("tbody-lotes");
+// Desglose por tipo de entrada de las filas visibles
+function dibujarResumenTipos(rows){
+  const tb = document.getElementById("tbody-tipos");
   if(!tb) return;
   const porTipo = {};
   rows.filter(esAprobada).forEach(c=>{
-    const t = c.tipo || "General";
+    const t = nombreTipo(c);
     (porTipo[t] = porTipo[t] || []).push(c);
   });
-  const tipos = Object.keys(porTipo).sort((a,b)=> ordenTipo(a) - ordenTipo(b) || a.localeCompare(b,"es"));
+  const tipos = Object.keys(porTipo).sort((a,b)=> a.localeCompare(b,"es"));
   tb.innerHTML = tipos.map(t=>{
     const s = totales(porTipo[t]);
     return `<tr>
@@ -1075,7 +1326,7 @@ function dibujarResumenLotes(rows){
     </tr>`;
   }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:20px">Sin ventas aprobadas con estos filtros</td></tr>`;
 
-  const tf = document.getElementById("tfoot-lotes");
+  const tf = document.getElementById("tfoot-tipos");
   if(tf){
     const s = totales(rows);
     tf.innerHTML = tipos.length ? `<tr>
@@ -1090,14 +1341,14 @@ function drawAdmin(){
       <td style="color:var(--dim)">${i+1}</td>
       <td style="color:var(--dim);font-family:'Space Mono',monospace;font-size:12px">${c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
       <td>${esc(c.nombre)}</td><td>${esc(c.apellido)}</td><td>${esc(c.evento)}</td>
-      <td>${esc(c.tipo || "General")}</td>
+      <td>${esc(nombreTipo(c))}</td>
       <td>${fmt(c.total)}</td>
       <td>${estadoPill(c.estado)}</td>
       <td>${c.usada ? '<span class="pill" style="border-color:#22c55e;color:#22c55e">Sí</span>' : '<span style="color:var(--dim2)">—</span>'}</td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${esc(c.codigo)}</td>
     </tr>`).join("") || `<tr><td colspan="10" style="text-align:center;color:var(--dim);padding:28px">Sin compras con estos filtros</td></tr>`;
 
-  dibujarResumenLotes(rows);
+  dibujarResumenTipos(rows);
 
   // Tarjetas de arriba: totales de TODO, sin filtrar
   const g = totales(PURCHASES);
@@ -1140,14 +1391,14 @@ async function borrarPendientes(){
 const csvCampo = v => `"${(v==null?"":String(v)).replace(/"/g,'""')}"`;
 function exportCSV(){
   const rows = filasFiltradas();  // exporta lo mismo que ves en pantalla
-  const head = "Fecha,Nombre,Apellido,Email,Evento,Lote,Precio,Estado,Ingreso,Codigo\n";
+  const head = "Fecha,Nombre,Apellido,Email,Evento,Tipo,Precio,Estado,Ingreso,Codigo\n";
   const body = rows.map(c=>[
-    c.creado_en||"", c.nombre, c.apellido, c.email||"", c.evento, c.tipo||"General",
+    c.creado_en||"", c.nombre, c.apellido, c.email||"", c.evento, nombreTipo(c),
     c.total, c.estado||"pendiente", c.usada ? "si" : "no", c.codigo
   ].map(csvCampo).join(",")).join("\n");
   const blob = new Blob(["﻿"+head+body],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "compradores-torinos.csv"; a.click();
+  a.href = URL.createObjectURL(blob); a.download = "compradores-bronx.csv"; a.click();
 }
 
 /* ================== USUARIOS REGISTRADOS (ADMIN) ================== */
@@ -1179,7 +1430,7 @@ function exportUsuariosCSV(){
   const body = USUARIOS.map(u=>`${u.creado_en||""},${u.nombre||""},${u.apellido||""},${u.telefono||""},${u.email||""}`).join("\n");
   const blob = new Blob([head+body],{type:"text/csv"});
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "usuarios-torinos.csv"; a.click();
+  a.href = URL.createObjectURL(blob); a.download = "usuarios-bronx.csv"; a.click();
 }
 
 
@@ -2051,7 +2302,6 @@ async function savePasado(){
       direccion: document.getElementById("pe-direccion").value.trim(),
       foto_url: fotoUrl,
       pasado: true, activo: true, agotado: false,
-      precio_general: 0,
       puertas: "", arte: "red"
     };
     const id = document.getElementById("pe-id").value;
@@ -2196,7 +2446,10 @@ async function initPage(){
   await restoreAdminSession();
 
   if(page==="eventos"){
-    await cargarVentasLote();   // los precios dependen de cuántas se vendieron
+    // Los precios y los cupos dependen de los tipos y de cuántas se vendieron:
+    // los dos tienen que estar antes de pintar nada.
+    await cargarTipos();
+    await cargarVentasTipo();
     await loadEvents();
     await loadPasados();
     checkReturnFromPayment();
@@ -2232,7 +2485,7 @@ async function initPage(){
     // Sin el filtro de pasados, un evento finalizado aparecía en "Eventos" Y en
     // "Eventos pasados" a la vez. Mismo criterio que loadEvents() y saveEvento().
     try{ EVENTS = DEMO ? DEMO_EVENTS : (await dbGet("eventos","activo=eq.true&order=id.asc")).filter(e=>!e.pasado); }catch(e){}
-    await cargarVentasLote();   // deja VENTAS_VISTA_OK para el aviso del panel
+    await cargarVentasTipo();   // deja VENTAS_VISTA_OK para el aviso del panel
     toggleSecreta();
     if(logged){
       abrirPanel();
