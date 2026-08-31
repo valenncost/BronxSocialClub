@@ -7,15 +7,14 @@
 <link rel="icon" href="/iconos/logo-bronx-cuadrado.png" type="image/png">
 <link rel="apple-touch-icon" href="/iconos/logo-bronx-cuadrado.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilos.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body data-page="entradas">
-<div class="grain-layer"></div>
 
 <div class="demo-banner" id="demo-banner">
-  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+  <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
 </div>
 
 <nav>
@@ -23,7 +22,7 @@
   <div class="tabs">
     <button class="tab active" id="tab-eventos" onclick="go('eventos')">Eventos</button>
     <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
-    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Admin</button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Studio</button>
   </div>
   <button class="nav-user" id="tab-cuenta" onclick="go('cuenta')">Ingresar</button>
 </nav>

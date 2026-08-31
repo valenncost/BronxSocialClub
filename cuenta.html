@@ -7,15 +7,14 @@
 <link rel="icon" href="/iconos/logo-bronx-cuadrado.png" type="image/png">
 <link rel="apple-touch-icon" href="/iconos/logo-bronx-cuadrado.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilos.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body data-page="cuenta">
-<div class="grain-layer"></div>
 
 <div class="demo-banner" id="demo-banner">
-  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+  <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
 </div>
 
 <nav>
@@ -23,13 +22,13 @@
   <div class="tabs">
     <button class="tab" id="tab-eventos" onclick="go('eventos')">Eventos</button>
     <button class="tab" id="tab-entradas" onclick="go('entradas')">Mis Entradas<span class="badge" id="badge" style="display:none">0</span></button>
-    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Admin</button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" style="display:none">Studio</button>
   </div>
   <button class="nav-user" id="tab-cuenta" onclick="go('cuenta')">Ingresar</button>
 </nav>
 
 <div class="page show" id="page-cuenta">
-  <section style="max-width:440px">
+  <section class="angosta">
 
     <!-- Vista: NO logueado -->
     <div id="auth-forms" style="display:none">
@@ -46,7 +45,7 @@
         <div class="field"><label>Email</label><input type="email" id="li-email" placeholder="tumail@gmail.com"></div>
         <div class="field"><label>Contraseña</label><input type="password" id="li-pass" placeholder="••••••" onkeydown="if(event.key==='Enter')userLogin()"></div>
         <p class="err" id="li-err"></p>
-        <button class="btn" style="width:100%" id="li-btn" onclick="userLogin()">Ingresar</button>
+        <button class="btn ancho" id="li-btn" onclick="userLogin()">Ingresar</button>
         <button class="link-mini" onclick="authView('olvide')">¿Olvidaste tu contraseña?</button>
         <div class="auth-sep"><span>o</span></div>
         <button class="google-btn" onclick="loginGoogle()">
@@ -66,7 +65,7 @@
         <div class="field"><label>Contraseña</label><input type="password" id="re-pass" placeholder="Mínimo 6 caracteres" onkeydown="if(event.key==='Enter')userRegister()"></div>
         <p class="err" id="re-err"></p>
         <p class="ok" id="re-ok"></p>
-        <button class="btn" style="width:100%" id="re-btn" onclick="userRegister()">Crear cuenta</button>
+        <button class="btn ancho" id="re-btn" onclick="userRegister()">Crear cuenta</button>
         <div class="auth-sep"><span>o</span></div>
         <button class="google-btn" onclick="loginGoogle()">
           <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.7-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41.4 34.9 44 29.9 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>
@@ -76,11 +75,11 @@
 
       <!-- OLVIDÉ MI CONTRASEÑA -->
       <div class="auth-card" id="form-olvide" style="display:none">
-        <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Poné el email de tu cuenta y te mandamos un link para elegir una contraseña nueva.</p>
+        <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px">Poné el email de tu cuenta y te mandamos un link para elegir una contraseña nueva.</p>
         <div class="field"><label>Email</label><input type="email" id="ol-email" placeholder="tumail@gmail.com" onkeydown="if(event.key==='Enter')enviarRecuperacion()"></div>
         <p class="err" id="ol-err"></p>
         <p class="ok" id="ol-ok"></p>
-        <button class="btn" style="width:100%" id="ol-btn" onclick="enviarRecuperacion()">Enviarme el link</button>
+        <button class="btn ancho" id="ol-btn" onclick="enviarRecuperacion()">Enviarme el link</button>
         <button class="link-mini" onclick="authView('login')">← Volver a ingresar</button>
       </div>
     </div>
@@ -94,7 +93,7 @@
         <div class="field"><label>Repetila</label><input type="password" id="nv-pass2" placeholder="Otra vez" autocomplete="new-password" onkeydown="if(event.key==='Enter')guardarPasswordNueva()"></div>
         <p class="err" id="nv-err"></p>
         <p class="ok" id="nv-ok"></p>
-        <button class="btn" style="width:100%" id="nv-btn" onclick="guardarPasswordNueva()">Guardar contraseña</button>
+        <button class="btn ancho" id="nv-btn" onclick="guardarPasswordNueva()">Guardar contraseña</button>
         <button class="link-mini" onclick="volverDePassword()">Cancelar</button>
       </div>
     </div>

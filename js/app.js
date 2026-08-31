@@ -235,9 +235,9 @@ async function loadEvents(){
         <span class="art-name">${esc(ev.nombre)}</span>
       </div>
       <div class="body"><div class="meta">
-        <span>📅 <b>${esc(ev.fecha_texto)}</b></span>
-        <span>📍 <b>${esc(ev.lugar)}</b></span>
-        <span>🕐 <b>${esc(ev.puertas)}</b></span>
+        <span><b>${esc(ev.fecha_texto)}</b></span>
+        <span><b>${esc(ev.lugar)}</b></span>
+        <span><b>${esc(ev.puertas)}</b></span>
       </div></div>
       <div class="stub">
         <div class="price">${desde != null ? `<small>Desde</small>${fmt(desde)}` : `<small>Entradas</small>Próximamente`}</div>
@@ -335,14 +335,14 @@ function openDetail(id, empujarURL=true){
 
   const loc = document.getElementById("d-location");
   if(ev.ubicacion_secreta){
-    loc.innerHTML = `<div class="secret-box">📍 <b>Ubicación secreta.</b> Vamos a publicar el lugar cerca de la fecha del evento.</div>`;
+    loc.innerHTML = `<div class="secret-box"><b>Ubicación secreta.</b> Vamos a publicar el lugar cerca de la fecha del evento.</div>`;
   } else if(ev.direccion){
     const q = encodeURIComponent(ev.direccion);
-    loc.innerHTML = `<p style="color:#c7c7cd;margin-bottom:12px;font-family:'Space Mono',monospace;font-size:13px">📍 ${esc(ev.direccion)}</p>
+    loc.innerHTML = `<p style="color:var(--text-dim);margin-bottom:12px;font-size:13px">${esc(ev.direccion)}</p>
       <div class="map-wrap"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>
       <a class="back" style="margin-top:14px;display:inline-block;text-decoration:none" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Abrir en Google Maps</a>`;
   } else {
-    loc.innerHTML = `<p style="color:var(--dim)">Ubicación a confirmar.</p>`;
+    loc.innerHTML = `<p style="color:var(--text-dim)">Ubicación a confirmar.</p>`;
   }
 
   const buyCardDet = document.querySelector(".d-buy-card");
@@ -388,7 +388,7 @@ function filaTipoHTML(t, eventoAgotadoYa){
   const validez = textoValidez(t);
   const detalles = [];
   if(t.descripcion) detalles.push(`<div class="tipo-desc">${esc(t.descripcion)}</div>`);
-  if(validez) detalles.push(`<div class="tipo-validez">🕐 ${esc(validez)}</div>`);
+  if(validez) detalles.push(`<div class="tipo-validez">${esc(validez)}</div>`);
   if(Number(t.accesos) > 1) detalles.push(`<div class="tipo-accesos">Entran ${Number(t.accesos)} personas</div>`);
   if(!sinCupo && restan !== Infinity && restan <= 10) detalles.push(`<div class="tipo-quedan">Quedan ${restan}</div>`);
 
@@ -658,7 +658,7 @@ function ticketHTML(c){
     <div class="row"><span>Código</span><span>${esc(c.codigo)}</span></div>
     <div class="qr-real" id="${qrId}" data-code="${esc(c.codigo)}"></div>
     <p class="confirm-note">Mostrá este QR en la puerta · Bronx Social Club</p>
-    <button class="btn" style="display:block;width:100%;margin-top:14px" onclick="descargarQR('${qrId}','${esc(c.codigo)}')">Descargar QR</button>
+    <button class="btn ancho" style="margin-top:14px" onclick="descargarQR('${qrId}','${esc(c.codigo)}')">Descargar QR</button>
   </div>`;
 }
 // Generar los QR reales como imagen (API confiable)
@@ -668,7 +668,7 @@ function pintarQRs(){
     el.dataset.done = "1";
     const code = el.dataset.code;
     const url = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=" + encodeURIComponent(code);
-    el.innerHTML = `<img src="${url}" alt="QR ${esc(code)}" style="width:100%;height:100%;display:block">`;
+    el.innerHTML = `<img src="${url}" alt="QR ${esc(code)}">`;   // el tamaño lo pone .qr-real img
   });
 }
 // Descargar la entrada COMPLETA como imagen (estilo ticket, con QR incluido)
@@ -773,10 +773,10 @@ async function checkReturnFromPayment(){
 
   if(pago === "ok"){
     if(USER){
-      alert("✅ ¡Pago confirmado! Tus entradas ya están en Mis Entradas y también te llegan por email.");
+      alert("¡Pago confirmado! Tus entradas ya están en Mis Entradas y también te llegan por email.");
       go('entradas');
     } else {
-      alert("✅ ¡Pago confirmado! Te enviamos las entradas por email. Iniciá sesión con ese mismo email para verlas acá.");
+      alert("¡Pago confirmado! Te enviamos las entradas por email. Iniciá sesión con ese mismo email para verlas acá.");
       go('cuenta');
     }
   } else if(pago === "error"){
@@ -964,9 +964,9 @@ async function restoreAdminSession(){
 function renderEventAdmin(){
   const list = document.getElementById("ev-admin-list");
   const aviso = (!DEMO && !VENTAS_VISTA_OK)
-    ? `<p class="err" style="display:block;margin-bottom:14px">⚠️ Falta crear la vista <b>ventas_por_tipo</b> en Supabase (sql/03-vistas.sql). Los números de acá abajo son correctos, pero en la página pública los cupos no se van a cerrar solos hasta que la crees.</p>`
+    ? `<p class="err" style="display:block;margin-bottom:14px">Falta crear la vista <b>ventas_por_tipo</b> en Supabase (sql/03-vistas.sql). Los números de acá abajo son correctos, pero en la página pública los cupos no se van a cerrar solos hasta que la crees.</p>`
     : "";
-  if(EVENTS.length===0){ list.innerHTML = aviso + `<p style="color:var(--dim);font-size:14px">No hay eventos. Creá el primero abajo.</p>`; return; }
+  if(EVENTS.length===0){ list.innerHTML = aviso + `<p style="color:var(--text-dim);font-size:14px">No hay eventos. Creá el primero abajo.</p>`; return; }
   list.innerHTML = aviso + EVENTS.map(ev=>{
     const tipos = tiposDeEvento(ev.id);
     const desde = precioDesde(ev);
@@ -980,8 +980,8 @@ function renderEventAdmin(){
     return `
     <div class="ev-admin-item">
       <div class="info">
-        <b>${esc(ev.nombre)}</b> ${ev.pasado?'<span class="pill" style="border-color:var(--dim);color:var(--dim)">PASADO</span>':''}
-        <span>${esc(ev.fecha_texto)} · ${tipos.length} tipo(s) ${desde != null ? `· desde <b style="color:var(--red-soft)">${fmt(desde)}</b>` : ""} ${eventoAgotado(ev)?'· AGOTADO':''} ${ev.ubicacion_secreta?'· 📍 secreta':''}</span>
+        <b>${esc(ev.nombre)}</b> ${ev.pasado?'<span class="pill" style="border-color:var(--text-dim);color:var(--text-dim)">PASADO</span>':''}
+        <span>${esc(ev.fecha_texto)} · ${tipos.length} tipo(s) ${desde != null ? `· desde <b style="color:var(--accent)">${fmt(desde)}</b>` : ""} ${eventoAgotado(ev)?'· AGOTADO':''} ${ev.ubicacion_secreta?'· secreta':''}</span>
         <span class="tipo-counts">Vendidas → ${detalleVentas}</span>
       </div>
       <div class="row-actions">
@@ -1038,7 +1038,7 @@ function renderTiposForm(){
   const box = document.getElementById("tipos-list");
   if(!box) return;
   if(!TIPOS_FORM.length){
-    box.innerHTML = `<p style="color:var(--dim);font-size:13px;margin-bottom:12px">Todavía no cargaste ningún tipo de entrada. Sin al menos uno, el evento se anuncia pero no se puede comprar.</p>`;
+    box.innerHTML = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">Todavía no cargaste ningún tipo de entrada. Sin al menos uno, el evento se anuncia pero no se puede comprar.</p>`;
     return;
   }
   box.innerHTML = TIPOS_FORM.map((t,i)=>{
@@ -1254,7 +1254,7 @@ async function saveEvento(){
       EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
       await cargarTipos(true);
     }
-    ok.textContent = id ? "✅ Evento actualizado." : "✅ Evento creado."; ok.style.display="block";
+    ok.textContent = id ? "Evento actualizado." : "Evento creado."; ok.style.display="block";
     resetEventoForm(); renderEventAdmin(); loadEvents();
   }catch(e){
     err.textContent = "Error al guardar: " + e.message; err.style.display="block";
@@ -1299,7 +1299,7 @@ async function loadPurchases(){
   try{
     PURCHASES = DEMO ? DEMO_PURCHASES : await dbGet("compras", "order=creado_en.desc");
   }catch(e){
-    document.getElementById("tbody").innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:28px">Error cargando compras. Revisá Supabase.</td></tr>`;
+    document.getElementById("tbody").innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--accent);padding:28px">Error cargando compras. Revisá Supabase.</td></tr>`;
     return;
   }
   // En el admin tenemos las compras completas: los conteos por tipo salen de acá
@@ -1389,31 +1389,31 @@ function dibujarResumenTipos(rows){
       <td><b>${esc(t)}</b></td>
       <td>${s.entradas}</td>
       <td>${s.compradores}</td>
-      <td><b style="color:var(--red-soft)">${fmt(s.recaudado)}</b></td>
+      <td><b style="color:var(--accent)">${fmt(s.recaudado)}</b></td>
     </tr>`;
-  }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:20px">Sin ventas aprobadas con estos filtros</td></tr>`;
+  }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:20px">Sin ventas aprobadas con estos filtros</td></tr>`;
 
   const tf = document.getElementById("tfoot-tipos");
   if(tf){
     const s = totales(rows);
     tf.innerHTML = tipos.length ? `<tr>
       <td><b>Total</b></td><td><b>${s.entradas}</b></td><td><b>${s.compradores}</b></td>
-      <td><b style="color:var(--red-soft)">${fmt(s.recaudado)}</b></td></tr>` : "";
+      <td><b style="color:var(--accent)">${fmt(s.recaudado)}</b></td></tr>` : "";
   }
 }
 function drawAdmin(){
   const rows = filasFiltradas();
   document.getElementById("tbody").innerHTML = rows.map((c,i)=>`
     <tr>
-      <td style="color:var(--dim)">${i+1}</td>
-      <td style="color:var(--dim);font-family:'Space Mono',monospace;font-size:12px">${c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+      <td style="color:var(--text-dim)">${i+1}</td>
+      <td style="color:var(--text-dim);font-size:12px">${c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
       <td>${esc(c.nombre)}</td><td>${esc(c.apellido)}</td><td>${esc(c.evento)}</td>
       <td>${esc(nombreTipo(c))}</td>
       <td>${fmt(c.total)}</td>
       <td>${estadoPill(c.estado)}</td>
-      <td>${c.usada ? '<span class="pill" style="border-color:#22c55e;color:#22c55e">Sí</span>' : '<span style="color:var(--dim2)">—</span>'}</td>
-      <td style="font-family:'Space Mono',monospace;font-size:12px">${esc(c.codigo)}</td>
-    </tr>`).join("") || `<tr><td colspan="10" style="text-align:center;color:var(--dim);padding:28px">Sin compras con estos filtros</td></tr>`;
+      <td>${c.usada ? '<span class="pill" style="border-color:#22c55e;color:#22c55e">Sí</span>' : '<span style="color:var(--text-faint)">—</span>'}</td>
+      <td style="font-size:12px">${esc(c.codigo)}</td>
+    </tr>`).join("") || `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:28px">Sin compras con estos filtros</td></tr>`;
 
   dibujarResumenTipos(rows);
 
@@ -1431,7 +1431,7 @@ function drawAdmin(){
     const filtrando = rows.length !== PURCHASES.length;
     res.innerHTML = `Mostrando <b>${rows.length}</b> de ${PURCHASES.length} compras`
       + (filtrando ? " (filtrado)" : "")
-      + ` · <b>${s.entradas}</b> aprobadas · <b>${s.compradores}</b> compradores · recaudado <b style="color:var(--red-soft)">${fmt(s.recaudado)}</b>`
+      + ` · <b>${s.entradas}</b> aprobadas · <b>${s.compradores}</b> compradores · recaudado <b style="color:var(--accent)">${fmt(s.recaudado)}</b>`
       + ` · ingresaron <b>${s.ingresados}</b>`;
   }
 }
@@ -1449,7 +1449,7 @@ async function borrarPendientes(){
       try{ const d = await r.json(); if(d.message) msg += ": " + d.message; }catch(e){}
       alert(msg); return;
     }
-    alert("✅ Compras pendientes borradas.");
+    alert("Compras pendientes borradas.");
     loadPurchases();
   }catch(e){ alert("Error de conexión: " + e.message); }
 }
@@ -1485,12 +1485,12 @@ function drawUsuarios(){
   const rows = USUARIOS.filter(u => ((u.nombre||"")+" "+(u.apellido||"")+" "+(u.email||"")).toLowerCase().includes(q));
   tb.innerHTML = rows.map((u,i)=>`
     <tr>
-      <td style="color:var(--dim)">${i+1}</td>
-      <td style="color:var(--dim);font-size:12px">${u.creado_en ? new Date(u.creado_en).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}</td>
+      <td style="color:var(--text-dim)">${i+1}</td>
+      <td style="color:var(--text-dim);font-size:12px">${u.creado_en ? new Date(u.creado_en).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}</td>
       <td>${esc(u.nombre||"—")}</td><td>${esc(u.apellido||"—")}</td>
       <td>${esc(u.telefono||"—")}</td><td style="font-size:13px">${esc(u.email||"—")}</td>
       <td>${botonStaff(u.email)}</td>
-    </tr>`).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--dim);padding:28px">Sin usuarios registrados todavía</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:28px">Sin usuarios registrados todavía</td></tr>`;
 }
 function exportUsuariosCSV(){
   const head = "Registrado,Nombre,Apellido,Telefono,Email\n";
@@ -1519,7 +1519,7 @@ async function toggleStaff(email){
       await dbDelete("staff", s.id);
     } else {
       await dbInsert("staff", { email: email.toLowerCase() });
-      alert("✅ Listo. " + email + " ya puede entrar a /admin con su cuenta y usar el escáner.");
+      alert("Listo. " + email + " ya puede entrar a /admin con su cuenta y usar el escáner.");
     }
     await loadStaff();
     drawUsuarios();
@@ -1539,7 +1539,7 @@ function drawStaff(){
     <div class="ev-admin-item">
       <div class="info"><b>${esc(s.email)}</b><span>Puede escanear y ver compradores</span></div>
       <div class="row-actions"><button class="btn ghost" onclick="quitarStaff(${s.id})">Quitar</button></div>
-    </div>`).join("") || `<p style="color:var(--dim);font-size:14px">Todavía no agregaste a nadie al equipo.</p>`;
+    </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no agregaste a nadie al equipo.</p>`;
 }
 async function agregarStaff(){
   const ok = document.getElementById("staff-ok"), err = document.getElementById("staff-err");
@@ -1548,7 +1548,7 @@ async function agregarStaff(){
   if(!email || !email.includes("@")){ err.textContent="Poné un email válido."; err.style.display="block"; return; }
   try{
     await dbInsert("staff", { email });
-    ok.textContent = "✅ Agregado. Esa persona ya puede entrar al panel (tiene que crearse una cuenta en la página con ese email si no la tiene)."; ok.style.display="block";
+    ok.textContent = "Agregado. Esa persona ya puede entrar al panel (tiene que crearse una cuenta en la página con ese email si no la tiene)."; ok.style.display="block";
     document.getElementById("staff-email").value="";
     loadStaff();
   }catch(e){ err.textContent = "No se pudo agregar: "+e.message; err.style.display="block"; }
@@ -1708,7 +1708,7 @@ function dibujarVendidas(){
       </div>
       <span class="vend-estado">${c.usada ? "entró "+hora : "falta"}</span>
     </div>`;
-  }).join("") || `<p style="color:var(--dim);font-size:14px;padding:14px 0">${VENDIDAS.length ? "Nadie coincide con esa búsqueda." : "No hay entradas vendidas todavía."}</p>`;
+  }).join("") || `<p style="color:var(--text-dim);font-size:14px;padding:14px 0">${VENDIDAS.length ? "Nadie coincide con esa búsqueda." : "No hay entradas vendidas todavía."}</p>`;
 }
 
 /* ---------- MODO PUERTA (sin internet) ----------
@@ -1748,7 +1748,7 @@ async function descargarLista(){
     const ok = guardarJSON(LISTA_KEY, { actualizado: new Date().toISOString(), entradas });
     if(!ok) throw new Error("no entra en la memoria del celular");
     pintarEstadoPuerta();
-    alert(`✅ Lista lista: ${filas.length} entrada(s) guardadas en este celular.\n\nYa podés escanear aunque te quedes sin señal.`);
+    alert(`Lista lista: ${filas.length} entrada(s) guardadas en este celular.\n\nYa podés escanear aunque te quedes sin señal.`);
   }catch(e){
     alert("No se pudo descargar la lista: " + e.message + "\n\nProbá con señal antes de salir para el evento.");
   }
@@ -1806,7 +1806,7 @@ async function sincronizarPuerta(silencioso){
   if(!silencioso){
     alert(quedan.length
       ? `Se subieron ${subidos} de ${cola.length}. Quedan ${quedan.length} para el próximo intento.`
-      : `✅ Se subieron los ${subidos} ingreso(s) que estaban guardados.`);
+      : `Se subieron los ${subidos} ingreso(s) que estaban guardados.`);
   }
   if(subidos && navigator.onLine) cargarIngresos();
 }
@@ -2083,7 +2083,7 @@ async function userRegister(){
       if(volver){ try{ localStorage.removeItem("tp_volver"); }catch(e){} window.location.href = volver; return; }
       mostrarPerfil();
     } else {
-      ok.textContent = "✅ Cuenta creada. Revisá tu email para confirmarla y después iniciá sesión.";
+      ok.textContent = "Cuenta creada. Revisá tu email para confirmarla y después iniciá sesión.";
       ok.style.display="block";
     }
   }catch(e){ err.textContent="Error de conexión. Probá de nuevo."; err.style.display="block"; }
@@ -2180,7 +2180,7 @@ async function enviarRecuperacion(){
   btn.disabled=true; btn.textContent="Enviando...";
   try{
     await pedirRecuperacion(email);
-    ok.textContent = `✅ Listo. Si ${email} tiene cuenta, te llega un mail con el link para cambiar la contraseña. Revisá también el correo no deseado.`;
+    ok.textContent = `Listo. Si ${email} tiene cuenta, te llega un mail con el link para cambiar la contraseña. Revisá también el correo no deseado.`;
     ok.style.display="block";
   }catch(e){ err.textContent = e.message; err.style.display="block"; }
   btn.disabled=false; btn.textContent="Enviarme el link";
@@ -2227,7 +2227,7 @@ async function guardarPasswordNueva(){
       throw new Error(msg);
     }
     RECUPERANDO = false; olvidarRecuperacion();
-    ok.textContent = "✅ Contraseña cambiada. Ya podés usarla."; ok.style.display="block";
+    ok.textContent = "Contraseña cambiada. Ya podés usarla."; ok.style.display="block";
     document.getElementById("nv-pass").value=""; document.getElementById("nv-pass2").value="";
     setTimeout(volverDePassword, 1400);
   }catch(e){ err.textContent = e.message; err.style.display="block"; }
@@ -2287,7 +2287,7 @@ async function guardarTelefono(){
       body: JSON.stringify({ telefono: tel })
     }).catch(()=>{});
     USER.telefono = tel;
-    ok.textContent="✅ Teléfono guardado."; ok.style.display="block";
+    ok.textContent="Teléfono guardado."; ok.style.display="block";
   }catch(e){ err.textContent="No se pudo guardar. Probá de nuevo."; err.style.display="block"; }
 }
 
@@ -2318,7 +2318,7 @@ function renderPasadosAdmin(){
         <button class="btn ghost" onclick="editPasado(${ev.id})">Editar / Galería</button>
         <button class="btn ghost" onclick="deletePasado(${ev.id})">Borrar</button>
       </div>
-    </div>`).join("") || `<p style="color:var(--dim);font-size:14px">Todavía no cargaste eventos pasados.</p>`;
+    </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no cargaste eventos pasados.</p>`;
 }
 function previewFotoPasado(){
   const f = document.getElementById("pe-foto").files[0];
@@ -2379,7 +2379,7 @@ async function savePasado(){
         if(creado && creado[0]){ document.getElementById("pe-id").value = creado[0].id; }
       }
     }
-    ok.textContent = id ? "✅ Evento pasado actualizado." : "✅ Evento pasado creado."; ok.style.display="block";
+    ok.textContent = id ? "Evento pasado actualizado." : "Evento pasado creado."; ok.style.display="block";
     document.getElementById("pe-form-title").textContent = "Editar: " + nombre;
     document.getElementById("pe-save-btn").textContent = "Guardar cambios";
     loadPasadosAdmin(); loadPasados();
@@ -2411,8 +2411,8 @@ async function loadPasados(){
         <span>${esc(ev.nombre)}</span>
       </div>
       <div class="body" style="padding:14px 16px">
-        <span style="color:var(--dim);font-size:13px">${esc(ev.fecha_texto||"")}</span>
-        <button class="btn ghost" style="width:100%;margin-top:10px" onclick="openPasado(${ev.id})">Ver evento</button>
+        <span style="color:var(--text-dim);font-size:13px">${esc(ev.fecha_texto||"")}</span>
+        <button class="btn ghost ancho" style="margin-top:10px" onclick="openPasado(${ev.id})">Ver evento</button>
       </div>
     </article>`).join("");
 }
@@ -2455,10 +2455,10 @@ async function openPasado(evId, empujarURL=true){
   const loc = document.getElementById("d-location");
   if(ev.direccion){
     const q = encodeURIComponent(ev.direccion);
-    loc.innerHTML = `<p style="color:#c7c7cd;margin-bottom:12px;font-size:13px">📍 ${esc(ev.direccion)}</p>
+    loc.innerHTML = `<p style="color:var(--text-dim);margin-bottom:12px;font-size:13px">${esc(ev.direccion)}</p>
       <div class="map-wrap"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>`;
   } else {
-    loc.innerHTML = `<p style="color:var(--dim)">${esc(ev.lugar||"")}</p>`;
+    loc.innerHTML = `<p style="color:var(--text-dim)">${esc(ev.lugar||"")}</p>`;
   }
 
   // Galería del evento
@@ -2581,8 +2581,8 @@ async function initPage(){
       if(vol && f && !document.getElementById("aviso-compra")){
         const av = document.createElement("p");
         av.id = "aviso-compra";
-        av.style.cssText = "background:rgba(225,6,0,.1);border:1px solid rgba(225,6,0,.4);color:var(--white);padding:12px 16px;border-radius:12px;font-size:14px;margin-bottom:18px";
-        av.textContent = "🎟️ Ingresá o creá tu cuenta para completar la compra de tus entradas.";
+        av.style.cssText = "background:rgba(225,6,0,.1);border:1px solid rgba(225,6,0,.4);color:var(--text);padding:12px 16px;border-radius:12px;font-size:14px;margin-bottom:18px";
+        av.textContent = "Ingresá o creá tu cuenta para completar la compra de tus entradas.";
         f.prepend(av);
       }
     }

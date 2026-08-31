@@ -44,11 +44,11 @@ Not deployed yet. Per `BRONX-SPEC.md` §6, this needs its own GitHub repo and it
 ## File map
 
 - `js/app.js` — **the entire application logic**, shared by every page (~1700 lines, no modules). Config constants (`SUPABASE_URL`, `SUPABASE_KEY`, `ADMIN_EMAIL`, `SERVICIO_PCT`) live at the very top.
-- `css/estilos.css` — all styles, shared by every page. CSS variables in `:root` define the Bronx theme — see "Palette" below.
+- `css/estilos.css` — all styles, shared by every page. Tokens in `:root` define the theme — see "Design system" below.
 - `index.html` — Eventos (event list) + Detalle (event detail + buy modal). Two `.page` sections in one file, switched client-side.
 - `entradas.html` — "Mis Entradas": a logged-in user's tickets, looked up by their Supabase session.
 - `cuenta.html` — login / register / profile (Supabase Auth: email+password and Google OAuth).
-- `admin.html` — login + admin panel (events, past events/gallery, buyers table, registered users, staff/team management).
+- `admin.html` — the **Studio** (the panel is called Studio in the UI, though the route stays `/admin`): login + dashboard with a sidebar (Resumen, Eventos, Compradores, Usuarios, Equipo, Escáner). Past events/gallery live inside Eventos.
 - `escaner.html` — QR scanner for door check-in (uses the `html5-qrcode` library from a CDN). Also the only page that registers the service worker and links the manifest.
 - `sw.js` + `manifest.webmanifest` + `iconos/` — installable-app plumbing for the scanner (see Modo puerta below).
 - `sql/` — every SQL statement the Supabase project needs, numbered in run order (`01-tablas` → `02-rls` → `03-vistas` → `04-storage`). `sql/README.md` explains the order and what still needs SQL that isn't written yet. **This is the schema's source of truth** — when you change what the app reads or writes, change these files too.
@@ -56,16 +56,25 @@ Not deployed yet. Per `BRONX-SPEC.md` §6, this needs its own GitHub repo and it
 
 Every HTML page loads the same `js/app.js` and `css/estilos.css`, and declares which page it is via `<body data-page="...">`. `initPage()` at the bottom of `app.js` (run on `DOMContentLoaded`) branches on that attribute to decide what to load/render.
 
-## Palette
+## Design system
 
-Defined in `css/estilos.css` `:root`:
-- `--black:#0A0A0B` — page background.
-- `--red:#F58C29` — solid orange. Despite the old variable name (kept because it's referenced everywhere), this is **not** red anymore — it's the solid color used for small text, borders, badges, active-tab backgrounds, focus outlines, etc.
-- `--red-dark:#c96a1f` — darker orange, used where the old code darkened `--red` (diagonal placeholder gradients).
-- `--red-soft:#F4526B` — the pink stop of the brand gradient, used as a solid accent color for things like price emphasis and warning text.
-- `--accent-gradient` (`linear-gradient(90deg,#F4526B,#F58C29)`) and `--accent-gradient-diag` (135deg version) — the two-tone pink-to-orange brand gradient, reserved for the primary CTA button, the hero glow blobs, and the ticket-card/flyer placeholder art. Everything else uses the solid orange.
+`css/estilos.css` was rewritten as a single flat design system — the old file had an "IDENTIDAD BRONX" block at the bottom overriding the base rules with `!important`; that pattern is gone, don't reintroduce it. Reference points for the look: FlashPass, Dice, Resident Advisor.
 
-When adding new UI, follow that split: gradient for the one or two flashiest brand moments on a page, solid `var(--red)` orange for everything smaller (text, borders, badges, status pills).
+**Tokens** (`:root`) — these names are also used inline from `js/app.js`, so renaming one means updating both:
+- `--bg:#08080A` page background (flat black), `--surface:#0F0F12` cards, `--surface-2:#16161A` elevated/hover, `--border:#1F1F24` all 1px borders.
+- `--text:#FAFAFA`, `--text-dim:#8B8B93`, `--text-faint:#55555C`.
+- `--accent:#F58C29` brand orange, `--accent-2:#F4526B` the pink of the logo, `--gradient` the pink→orange brand gradient.
+- `--ok`/`--warn`/`--bad` for semantic states (scanner, purchase status).
+
+**Rules the stylesheet enforces — keep to them when adding UI:**
+- The background is flat black. **No glows, no radial background gradients, no colored shadows, no grain texture.** All of those were removed; adding one back reverts the rebrand.
+- `--accent` is only for the primary button, active states, and small details. `--accent-2` and `--gradient` belong to the logo — don't paint text or surfaces with them.
+- The only `linear-gradient`s left are black scrims for legibility over photos and the "Ver más" mask. Not decorative.
+- Type is **Inter** (400/500/600/700/800). Scale is set once on `h1`–`h4` and on a shared label rule (`label`, `th`, `.d-section-title`, `.tipos-titulo`, …) — reuse those instead of restating sizes. No forced uppercase on long titles.
+- Spacing on a 4px scale. Radii: 8px inputs/buttons, 12px cards, 999px pills. Shadow only on `.modal`.
+- Transitions are `150ms ease` (`var(--transicion)`). **No entrance animations** — the `fadeUp` keyframe and its staggered `nth-child` delays were deleted.
+- No emoji in the interface. `✕` (close) and `✓` (valid at the door) stay — they're typographic symbols, not emoji.
+- **Don't put widths in inline `style=` attributes.** Use the modifiers: `section.angosta` (480px single-column page — cuenta, escáner), `.btn.ancho` (full-width button), `.alta-staff` (the team-email input row). Layout that repeats belongs in the stylesheet, not in five copies of `style="width:100%"`.
 
 ## Architecture
 
@@ -172,4 +181,4 @@ Never widen this to expose per-row purchase data to `anon`.
 - `esc()` (js/app.js) escapes `<`, `>` and both quote characters before interpolating any user-supplied string into `innerHTML`. Every place that builds HTML from `eventos`/`tipos_ticket`/`compras`/user input uses it — always use it for new interpolated HTML too, including inside `value="..."` attributes.
 - `fmt()` formats prices as `$` + `es-AR` locale thousands separators; use it for any new price display instead of raw numbers.
 - Forms follow a repeated pattern: a hidden `*-id` input distinguishes create vs. edit, `reset*Form()`/`edit*()` pairs manage that, and `*-err`/`*-ok` `<p>` elements show inline validation/success messages (see the `ev-*` event form and `pe-*` past-event form for the template to copy).
-- Each `.admin-section` in `admin.html` is made collapsible generically by `initColapsables()` — don't hand-roll collapse behavior for new sections, just follow the existing `<h3>` + section markup and it's picked up automatically.
+- `admin.html` is a dashboard: a fixed 240px sidebar plus a content column with a breadcrumb header. Each `.admin-section` is one tab, shown one at a time by `mostrarSeccionAdmin(clave)` toggling `.activa`; the list of tabs is `SECCIONES_ADMIN` in `app.js`. To add a section you need three things: the `<div class="admin-section" id="sec-<clave>">`, a `<button class="dash-nav-item" id="nav-<clave>">` in the sidebar, and an entry in `SECCIONES_ADMIN`. If it's admin-only, add **both** ids to the list in `aplicarRol()` — hiding the section without hiding its sidebar button leaves staff a tab that opens an empty panel. (The old `initColapsables()` collapsible sections are gone; sections are tabs now.)

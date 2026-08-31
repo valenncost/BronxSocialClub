@@ -3,32 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Bronx Social Club — Admin</title>
+<title>Bronx Social Club — Studio</title>
 <link rel="icon" href="/iconos/logo-bronx-cuadrado.png" type="image/png">
 <link rel="apple-touch-icon" href="/iconos/logo-bronx-cuadrado.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilos.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body data-page="admin">
-<div class="grain-layer"></div>
 
 <div class="demo-banner" id="demo-banner">
-  ⚠️ <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
+  <b>Modo demo:</b> Supabase todavía no está configurado. Los datos no se guardan.
 </div>
 
-<!-- ============ PÁGINA: ADMIN ============ -->
+<!-- ============ PÁGINA: STUDIO ============ -->
 <div class="page show" id="page-admin">
   <section id="admin-login" style="display:none">
     <div class="login-box">
       <img class="login-logo" src="/iconos/logo-bronx.png" alt="BRONX">
-      <h3>Panel Admin</h3>
-      <p style="color:var(--dim);font-size:13px;margin-bottom:16px">acceso solo para el equipo de Bronx Social Club</p>
+      <h3>Studio</h3>
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px">acceso solo para el equipo de Bronx Social Club</p>
       <input type="email" id="email" placeholder="Email" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')login()">
       <input type="password" id="pass" placeholder="Contraseña" onkeydown="if(event.key==='Enter')login()">
       <p class="err" id="err">Email o contraseña incorrectos</p>
-      <button class="btn" id="login-btn" onclick="login()" style="width:100%">Entrar</button>
+      <button class="btn ancho" id="login-btn" onclick="login()">Entrar</button>
       <button class="dash-link" onclick="go('eventos')" style="margin-top:16px">← Volver al sitio</button>
     </div>
   </section>
@@ -83,7 +82,7 @@
         <button class="dash-burger" onclick="abrirSidebar()" aria-label="Abrir menú">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
-        <p class="dash-breadcrumb"><span>Panel</span> <em>/</em> <b id="dash-titulo">Resumen</b></p>
+        <p class="dash-breadcrumb"><span>Studio</span> <em>/</em> <b id="dash-titulo">Resumen</b></p>
         <button class="btn" id="btn-crear-evento" onclick="nuevoEvento()">Crear evento</button>
       </header>
 
@@ -117,7 +116,7 @@
 
               <div class="full">
                 <label style="margin-bottom:8px">Tipos de entrada</label>
-                <p style="color:var(--dim);font-size:12px;margin:-4px 0 12px">Todos se venden <b>al mismo tiempo</b> en la página del evento, en el orden que les des acá. Los que marques como <b>Combos</b> van en su propia sección, abajo de los tickets. Dejá el cupo vacío si ese tipo no tiene límite; cuando se llena, se muestra agotado solo.</p>
+                <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Todos se venden <b>al mismo tiempo</b> en la página del evento, en el orden que les des acá. Los que marques como <b>Combos</b> van en su propia sección, abajo de los tickets. Dejá el cupo vacío si ese tipo no tiene límite; cuando se llena, se muestra agotado solo.</p>
                 <div id="tipos-list"></div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
                   <button class="btn ghost" onclick="agregarTipo('ticket')">+ Agregar ticket</button>
@@ -151,7 +150,7 @@
           <!-- Eventos pasados: viven dentro de Eventos, no tienen su propia pestaña -->
           <div id="sec-pasados" style="margin-top:44px">
             <h3>Eventos pasados</h3>
-            <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Mostrá cómo se vivieron tus fiestas anteriores. Sin precios ni venta: solo el recuerdo.</p>
+            <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px">Mostrá cómo se vivieron tus fiestas anteriores. Sin precios ni venta: solo el recuerdo.</p>
             <div class="ev-admin-list" id="pe-list"></div>
 
             <div class="dash-card">
@@ -261,9 +260,9 @@
         <!-- ---------- EQUIPO ---------- -->
         <div class="admin-section" id="sec-equipo">
           <h3>Equipo (acceso al escáner)</h3>
-          <p style="color:var(--dim);font-size:14px;margin-bottom:16px">Agregá los emails de tu equipo. Van a poder entrar a este panel <b>solo para escanear y ver compradores</b> — no pueden tocar eventos ni nada más. Cada uno tiene que crearse su cuenta en la página (Ingresar → Registrarse) con ese mismo email.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;max-width:460px">
-            <input type="email" id="staff-email" placeholder="amigo@gmail.com" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')agregarStaff()">
+          <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px">Agregá los emails de tu equipo. Van a poder entrar a este panel <b>solo para escanear y ver compradores</b> — no pueden tocar eventos ni nada más. Cada uno tiene que crearse su cuenta en la página (Ingresar → Registrarse) con ese mismo email.</p>
+          <div class="alta-staff">
+            <input type="email" id="staff-email" placeholder="amigo@gmail.com" onkeydown="if(event.key==='Enter')agregarStaff()">
             <button class="btn" onclick="agregarStaff()">Agregar</button>
           </div>
           <p class="ok" id="staff-ok"></p>
