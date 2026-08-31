@@ -263,17 +263,17 @@ body > nav{
   background-size:cover;background-position:center;
   filter:blur(72px);
   pointer-events:none;
-  transition:filter 600ms ease;
+  transition:filter 600ms ease,opacity 600ms ease;
 }
 .hero::after{content:"";position:absolute;inset:0;z-index:0;background:rgba(8,8,10,.75);pointer-events:none}
-/* Slides "rojo" y "neutro": el logo de fondo es naranja de marca, así que
-   dejarlo de base compite con cualquier otro color que se le ponga encima
-   a un alfa tan bajo (0.02) — un tinte rojo ahí arriba apenas se nota. Se
-   desatura el logo en los dos, y en "rojo" el color entero sale del tinte;
-   en "neutro" no hay tinte, así que queda realmente gris. En "naranja" no
-   hace falta tocarlo: el logo ya es ese color. */
-.hero[data-tinte="rojo"]::before,
+/* Slide "neutro": el logo de fondo es naranja de marca, así que se desatura
+   para que quede gris de verdad en vez de "naranja apagado".
+   Slide "rojo": desaturarlo NO alcanza — un tinte rojo puesto arriba de un
+   logo gris se sigue leyendo gris con un dejo rojizo, nunca rojo limpio (eso
+   era el bug real, no el alfa del tinte). Directamente se apaga el logo acá
+   y el fondo pasa a ser sólo el halo de .hero-tinte de abajo. */
 .hero[data-tinte="neutro"]::before{filter:blur(72px) grayscale(1)}
+.hero[data-tinte="rojo"]::before{opacity:0}
 
 /* Tinte de color del hero, uno por slide activo — mismo mecanismo que la luz
    de ambiente de body::before (radial-gradient radial, transparent 70%),
@@ -376,18 +376,21 @@ body > nav{
   transition:box-shadow var(--transicion),transform var(--transicion);
 }
 .ticket:hover{transform:translateY(-4px)}
-/* El glow sale del color propio del evento (data-color-evento la escribe
-   loadEvents) — es la única señal de "tarjeta" que tiene, ya que no hay
-   fondo ni borde. Sutil en reposo, más presente al pasar el mouse. */
-.ticket[data-color-evento]{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.18)}
-.ticket[data-color-evento]:hover{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.30)}
-.ticket.soldout[data-color-evento],
-.ticket.pasado[data-color-evento]{box-shadow:none}
 .art{
   position:relative;aspect-ratio:4/5;width:100%;
   border-radius:var(--radio-card);overflow:hidden;
   background-size:cover;background-position:center;
+  transition:box-shadow var(--transicion);
 }
+/* El glow sale del color propio del evento (data-color-evento la escribe
+   loadEvents, en el <article>, y --acento-rgb hereda de ahí a esta foto) —
+   va sólo en la foto, no en toda la tarjeta: puesto en .ticket (que incluye
+   el texto de abajo) el blur de 40px se desparramaba detrás del título y la
+   fecha y se veía como un fondo con color ahí, en vez de quedar transparente. */
+.ticket[data-color-evento] .art{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.18)}
+.ticket[data-color-evento]:hover .art{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.30)}
+.ticket.soldout[data-color-evento] .art,
+.ticket.pasado[data-color-evento] .art{box-shadow:none}
 /* Sin foto: nada de caja sólida — transparente, con el nombre del evento
    centrado (las únicas "letras") y un borde punteado apenas para marcar el
    4:5 en la grilla, mismo tratamiento que .empty en el resto del sitio. */
