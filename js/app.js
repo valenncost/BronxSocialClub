@@ -274,10 +274,12 @@ async function loadEvents(){
 
 /* ================== CARRUSEL DEL HERO ==================
    Título + bajada rotan cada 4s con cross-fade de 600ms (CSS, vía la clase
-   "activa"); acá sólo se decide CUÁL está activo. Cada slide trae su propio
-   tinte de fondo — "naranja"/"rojo" prenden uno de los .hero-tinte,
-   "neutro" no prende ninguno y además desatura el logo de fondo (ver
-   .hero[data-tinte="neutro"]::before en el CSS). */
+   "activa"); acá sólo se decide CUÁL está activo. Cada slide trae su propia
+   foto de fondo (.hero-bg-slide) y su propio glow de color detrás del
+   título (.hero-glow) — los tres elementos de cada tipo comparten el mismo
+   data-tinte y togglean "activa"/"activo" juntos, así la foto, el glow, el
+   título y el botón (que se retiñe por CSS con hero.dataset.tinte, ver
+   estilos.css) cruzan todos en sincro. */
 const HERO_SLIDES = ["naranja", "rojo", "neutro"];
 let heroSlideActual = 0;
 let heroTimer = null;
@@ -289,7 +291,10 @@ function activarHeroSlide(i){
   document.querySelectorAll("#hero-slides .hero-slide").forEach((el, idx)=>{
     el.classList.toggle("activa", idx === i);
   });
-  document.querySelectorAll(".hero-tinte").forEach(el=>{
+  document.querySelectorAll(".hero-bg-slide").forEach(el=>{
+    el.classList.toggle("activa", el.dataset.tinte === HERO_SLIDES[i]);
+  });
+  document.querySelectorAll(".hero-glow").forEach(el=>{
     el.classList.toggle("activo", el.dataset.tinte === HERO_SLIDES[i]);
   });
 }
