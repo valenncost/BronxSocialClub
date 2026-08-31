@@ -252,6 +252,41 @@ async function loadEvents(){
 }
 // [loadEvents(); -> ahora se llama desde initPage()]
 
+/* ================== CARRUSEL DEL HERO ==================
+   Título + bajada rotan cada 4s con cross-fade de 600ms (CSS, vía la clase
+   "activa"); acá sólo se decide CUÁL está activo. Cada slide trae su propio
+   tinte de fondo — "naranja"/"rojo" prenden uno de los .hero-tinte,
+   "neutro" no prende ninguno y además desatura el logo de fondo (ver
+   .hero[data-tinte="neutro"]::before en el CSS). */
+const HERO_SLIDES = ["naranja", "rojo", "neutro"];
+let heroSlideActual = 0;
+let heroTimer = null;
+
+function activarHeroSlide(i){
+  const hero = document.getElementById("hero");
+  if(!hero) return;
+  hero.dataset.tinte = HERO_SLIDES[i];
+  document.querySelectorAll("#hero-slides .hero-slide").forEach((el, idx)=>{
+    el.classList.toggle("activa", idx === i);
+  });
+  document.querySelectorAll(".hero-tinte").forEach(el=>{
+    el.classList.toggle("activo", el.dataset.tinte === HERO_SLIDES[i]);
+  });
+}
+
+function iniciarHeroCarrusel(){
+  const hero = document.getElementById("hero");
+  if(!hero) return;
+  activarHeroSlide(0);
+  clearInterval(heroTimer);
+  // Reduced motion: se queda en el primer slide fijo, sin arrancar el intervalo.
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  heroTimer = setInterval(()=>{
+    heroSlideActual = (heroSlideActual + 1) % HERO_SLIDES.length;
+    activarHeroSlide(heroSlideActual);
+  }, 4000);
+}
+
 /* ================== DETALLE ================== */
 let cur = null;       // el evento abierto en el detalle
 let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
@@ -2522,6 +2557,7 @@ async function initPage(){
   await restoreAdminSession();
 
   if(page==="eventos"){
+    iniciarHeroCarrusel();
     // Los precios y los cupos dependen de los tipos y de cuántas se vendieron:
     // los dos tienen que estar antes de pintar nada.
     await cargarTipos();

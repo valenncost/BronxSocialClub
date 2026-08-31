@@ -203,7 +203,7 @@ body > nav{
 
 /* ---------- HERO ---------- */
 .hero{position:relative;padding:96px 24px 80px;text-align:center;border-bottom:1px solid var(--border);overflow:hidden}
-.hero > *{position:relative;z-index:1}
+.hero > *:not(.hero-tinte){position:relative;z-index:1}
 /* Fondo del hero: el logo de Bronx con el mismo tratamiento que .detail-bg
    (blur 72px + capa negra plana al 75%) — misma "función" visual, pero acá
    la imagen es siempre el logo, fija, sin depender de ningún evento. El
@@ -218,14 +218,55 @@ body > nav{
   background-size:cover;background-position:center;
   filter:blur(72px);
   pointer-events:none;
+  transition:filter 600ms ease;
 }
 .hero::after{content:"";position:absolute;inset:0;z-index:0;background:rgba(8,8,10,.75);pointer-events:none}
+/* Slides "rojo" y "neutro": el logo de fondo es naranja de marca, así que
+   dejarlo de base compite con cualquier otro color que se le ponga encima
+   a un alfa tan bajo (0.02) — un tinte rojo ahí arriba apenas se nota. Se
+   desatura el logo en los dos, y en "rojo" el color entero sale del tinte;
+   en "neutro" no hay tinte, así que queda realmente gris. En "naranja" no
+   hace falta tocarlo: el logo ya es ese color. */
+.hero[data-tinte="rojo"]::before,
+.hero[data-tinte="neutro"]::before{filter:blur(72px) grayscale(1)}
+
+/* Tinte de color del hero, uno por slide activo — mismo mecanismo y mismo
+   alfa que la luz de ambiente de body::before (radial-gradient a 0.02),
+   sólo que acá el color rota con el título. Va arriba de la capa negra de
+   ::after (que si no, aplastaría un alfa tan bajo a nada) y abajo del
+   texto. Los dos empiezan en opacity:0 y sólo uno está ".activo" a la vez;
+   si ninguno lo está (slide "neutro") el hero queda sin tinte. */
+.hero-tinte{
+  position:absolute;inset:0;z-index:0;opacity:0;pointer-events:none;
+  transition:opacity 600ms ease;
+}
+.hero-tinte.activo{opacity:1}
+.hero-tinte[data-tinte="naranja"]{background:radial-gradient(ellipse 60% 45% at 20% 0%, rgba(245,140,41,0.02), transparent 70%)}
+.hero-tinte[data-tinte="rojo"]{background:radial-gradient(ellipse 60% 45% at 20% 0%, rgba(232,67,46,0.02), transparent 70%)}
+
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
   color:var(--text-dim);margin-bottom:16px;
 }
-.hero h1{max-width:900px;margin:0 auto 16px}
+/* Carrusel de título+bajada: los tres slides ocupan la misma celda de grid
+   (así el contenedor mide lo que mide el más alto, sin saltos de layout al
+   rotar) y se cruzan con opacity. El delay en visibility deja que el saliente
+   siga visible mientras se apaga, en vez de desaparecer de un salto. */
+.hero-slides{display:grid;max-width:900px;margin:0 auto}
+.hero-slide{
+  grid-area:1/1;opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 600ms ease, visibility 0s 600ms;
+}
+.hero-slide.activa{opacity:1;visibility:visible;pointer-events:auto;transition:opacity 600ms ease, visibility 0s}
+.hero h1{margin:0 auto 16px}
+.hero .acento-rojo{color:#E8432E}
 .hero p{color:var(--text-dim);max-width:520px;margin:0 auto 32px;font-size:1.0625rem}
+@media (prefers-reduced-motion: reduce){
+  /* El JS no arranca el intervalo, pero por las dudas: si algo llegara a
+     tocar la clase igual, que no cruce sin transición no es un problema —
+     lo que hay que evitar es la rotación en sí, que resuelve el JS. */
+  .hero-slide{transition:none}
+}
 
 /* ---------- TARJETAS DE EVENTO ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:24px}

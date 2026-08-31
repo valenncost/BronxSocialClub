@@ -29,10 +29,24 @@
 
 <!-- ============ PÁGINA: EVENTOS ============ -->
 <div class="page show" id="page-eventos">
-  <header class="hero">
+  <header class="hero" id="hero">
+    <span class="hero-tinte" data-tinte="naranja" aria-hidden="true"></span>
+    <span class="hero-tinte" data-tinte="rojo" aria-hidden="true"></span>
     <p class="eyebrow">bronx social club · bahía blanca</p>
-    <h1>Cachengue <em>es de Bronx</em></h1>
-    <p>Sacá tu entrada online y entrá directo con el QR en el celu. Sin filas.</p>
+    <div class="hero-slides" id="hero-slides">
+      <div class="hero-slide activa">
+        <h1>Cachengue <em>es de Bronx</em></h1>
+        <p>Sacá tu entrada online y entrá directo con el QR en el celu. Sin filas.</p>
+      </div>
+      <div class="hero-slide">
+        <h1>Jueves <em class="acento-rojo">Picante</em></h1>
+        <p>Los jueves, la previa más picante de Bahía Blanca.</p>
+      </div>
+      <div class="hero-slide">
+        <h1>Bronx, el mejor boliche de la ciudad</h1>
+        <p>El boliche de siempre en Bahía Blanca. Entrá y viví la noche.</p>
+      </div>
+    </div>
     <a class="btn" href="#lista" onclick="event.preventDefault();document.getElementById('lista').scrollIntoView({behavior:'smooth'})">Ver próximos eventos</a>
   </header>
 
