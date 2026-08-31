@@ -2,9 +2,12 @@
    BRONX SOCIAL CLUB — hoja de estilos única, compartida por las 5 páginas.
 
    Reglas de la casa:
-   - Fondo negro plano. Nada de glows, degradados de fondo ni sombras de color.
-   - El naranja se usa sólo en el botón primario, los estados activos y
-     detalles chicos. El degradado rosa→naranja es del logo, de nada más.
+   - Fondo negro plano. Nada de glows, degradados de fondo ni sombras de color,
+     salvo el hero (ver "COLOR DE ACENTO POR EVENTO" y "HERO" más abajo).
+   - --accent es sólido y se usa para bordes finos, íconos y foco. El botón
+     primario, las palabras destacadas del hero y los estados activos con
+     fondo lleno usan --accent-gradient. El degradado rosa→naranja (--gradient)
+     sigue siendo sólo del logo.
    - Escala de espaciado de 4px. Radios: 8 inputs y botones, 12 tarjetas,
      999 pills. Bordes de 1px. Sombra sólo en los modales.
    ============================================================ */
@@ -25,6 +28,11 @@
   --acento-rgb:245,140,41;
   --accent-2:#F4526B;
   --gradient:linear-gradient(135deg,#F4526B,#F58C29);
+  /* Degradado de identidad: botón primario, palabras destacadas del hero y
+     estados activos con fondo lleno. --accent en sí queda sólido (bordes
+     finos, íconos, foco) — este es el único lugar donde el naranja de marca
+     se pinta como degradado fuera del logo. */
+  --accent-gradient:linear-gradient(135deg,#FF6B35,#F7931E);
 
   /* Semánticos, para estados */
   --ok:#22C55E;
@@ -121,7 +129,7 @@ section.angosta{max-width:480px}
   text-decoration:none;text-align:center;white-space:nowrap;
   font-family:inherit;font-size:0.875rem;font-weight:600;line-height:1.2;
   padding:12px 20px;border-radius:var(--radio-campo);
-  background:var(--accent);color:#0A0A0A;
+  background:var(--accent-gradient);color:#0A0A0A;
   transition:opacity var(--transicion),background var(--transicion),
              border-color var(--transicion),box-shadow var(--transicion);
 }
@@ -267,19 +275,31 @@ body > nav{
 .hero[data-tinte="rojo"]::before,
 .hero[data-tinte="neutro"]::before{filter:blur(72px) grayscale(1)}
 
-/* Tinte de color del hero, uno por slide activo — mismo mecanismo y mismo
-   alfa que la luz de ambiente de body::before (radial-gradient a 0.02),
-   sólo que acá el color rota con el título. Va arriba de la capa negra de
-   ::after (que si no, aplastaría un alfa tan bajo a nada) y abajo del
-   texto. Los dos empiezan en opacity:0 y sólo uno está ".activo" a la vez;
-   si ninguno lo está (slide "neutro") el hero queda sin tinte. */
+/* Tinte de color del hero, uno por slide activo — mismo mecanismo que la luz
+   de ambiente de body::before (radial-gradient radial, transparent 70%),
+   pero a un alfa bien más alto (0.10/0.16 en vez de 0.02): es "luz de club"
+   detrás del contenido del hero a propósito, no la iluminación casi
+   imperceptible del resto del sitio — eso sigue en body::before, sin tocar.
+   El color rota con el título. Va arriba de la capa negra de ::after (que si
+   no, aplastaría hasta un alfa alto a poco) y abajo del texto. Los dos
+   empiezan en opacity:0 y sólo uno está ".activo" a la vez; si ninguno lo
+   está (slide "neutro") el hero queda sin tinte de fondo (el botón sí cambia,
+   ver más abajo). */
 .hero-tinte{
   position:absolute;inset:0;z-index:0;opacity:0;pointer-events:none;
   transition:opacity 600ms ease;
 }
 .hero-tinte.activo{opacity:1}
-.hero-tinte[data-tinte="naranja"]{background:radial-gradient(ellipse 60% 45% at 20% 0%, rgba(245,140,41,0.02), transparent 70%)}
-.hero-tinte[data-tinte="rojo"]{background:radial-gradient(ellipse 60% 45% at 20% 0%, rgba(232,67,46,0.02), transparent 70%)}
+/* Ambiente de club: halo principal arriba a la izquierda (subido a 0.10,
+   pedido explícito — es más fuerte que el resto de las luces de acento del
+   sitio a propósito, sólo acá) más un segundo halo chico y más saturado
+   abajo, para que se sienta el piso del hero iluminado. */
+.hero-tinte[data-tinte="naranja"]{background:
+  radial-gradient(ellipse 60% 45% at 20% 0%, rgba(255,107,53,0.10), transparent 70%),
+  radial-gradient(ellipse 32% 24% at 50% 100%, rgba(247,147,30,0.16), transparent 70%)}
+.hero-tinte[data-tinte="rojo"]{background:
+  radial-gradient(ellipse 60% 45% at 20% 0%, rgba(255,59,48,0.10), transparent 70%),
+  radial-gradient(ellipse 32% 24% at 50% 100%, rgba(193,18,31,0.16), transparent 70%)}
 
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
@@ -296,8 +316,38 @@ body > nav{
 }
 .hero-slide.activa{opacity:1;visibility:visible;pointer-events:auto;transition:opacity 600ms ease, visibility 0s}
 .hero h1{margin:0 auto 16px}
-.hero .acento-rojo{color:#E8432E}
+/* Palabra destacada del hero: degradado de identidad en vez del naranja
+   sólido de --accent (que sigue siendo el de --accent en el resto del
+   sitio). Cada slide de color trae su propio degradado. */
+.hero h1 em{
+  font-style:normal;color:transparent;
+  background:var(--accent-gradient);
+  -webkit-background-clip:text;background-clip:text;
+}
+.hero .acento-rojo{
+  background:linear-gradient(135deg,#FF3B30,#C1121F);
+  -webkit-background-clip:text;background-clip:text;
+}
 .hero p{color:var(--text-dim);max-width:520px;margin:0 auto 32px;font-size:1.0625rem}
+
+/* Botón "Ver próximos eventos": se retiñe con el slide activo (mismo
+   data-tinte del carrusel) y su color anima igual que el título y el halo —
+   600ms, ease, sincronizado con el cross-fade de los slides. El degradado en
+   sí no interpola color a color en todos los navegadores, pero el glow sí, y
+   el cambio queda igual de suave al ojo por el resto de la transición. */
+.hero .btn{
+  background:var(--accent-gradient);
+  box-shadow:0 0 24px rgba(255,107,53,.30);
+  transition:background 600ms ease,box-shadow 600ms ease,opacity var(--transicion);
+}
+.hero[data-tinte="rojo"] .btn{
+  background:linear-gradient(135deg,#FF3B30,#C1121F);
+  box-shadow:0 0 24px rgba(255,59,48,.35);
+}
+.hero[data-tinte="neutro"] .btn{
+  background:#FFFFFF;color:#0A0A0A;
+  box-shadow:0 0 24px rgba(255,255,255,.25);
+}
 @media (prefers-reduced-motion: reduce){
   /* El JS no arranca el intervalo, pero por las dudas: si algo llegara a
      tocar la clase igual, que no cruce sin transición no es un problema —
@@ -532,7 +582,7 @@ body > nav{
   font-family:inherit;font-size:0.875rem;font-weight:500;padding:10px;border-radius:999px;
   transition:background var(--transicion),color var(--transicion);
 }
-.auth-tab.active{background:var(--accent);color:#0A0A0A;font-weight:600}
+.auth-tab.active{background:var(--accent-gradient);color:#0A0A0A;font-weight:600}
 .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:24px}
 .auth-card .two{display:flex;gap:12px}
 .auth-card .two .field{flex:1}
@@ -736,7 +786,7 @@ tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(
   font-family:inherit;font-size:0.875rem;font-weight:500;padding:10px;border-radius:999px;
   transition:background var(--transicion),color var(--transicion);
 }
-.esc-tab.active{background:var(--accent);color:#0A0A0A;font-weight:600}
+.esc-tab.active{background:var(--accent-gradient);color:#0A0A0A;font-weight:600}
 
 #reader{margin-bottom:24px;border-radius:var(--radio-card);overflow:hidden;max-width:400px;width:100%}
 .scan-result{border:1px solid var(--border);border-radius:var(--radio-card);padding:24px;margin-bottom:16px;text-align:center;display:none}
