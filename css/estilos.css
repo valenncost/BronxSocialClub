@@ -212,7 +212,7 @@ body > nav{
   width:70%;aspect-ratio:850/240;max-width:900px;
   background-image:url("/iconos/logo-bronx.png");
   background-size:contain;background-repeat:no-repeat;background-position:center;
-  opacity:.04;filter:grayscale(1);
+  opacity: 0.15;;filter:(1);
   pointer-events:none;
 }
 .hero > *{position:relative;z-index:1}
