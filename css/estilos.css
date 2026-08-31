@@ -203,19 +203,25 @@ body > nav{
 
 /* ---------- HERO ---------- */
 .hero{position:relative;padding:96px 24px 80px;text-align:center;border-bottom:1px solid var(--border);overflow:hidden}
-/* Marca de agua: el logo como textura de fondo, no como elemento visible.
-   background-image (no <img>) para que quede fuera del flujo y del orden de
-   lectura sin necesitar aria-hidden. */
-.hero::before{
-  content:"";position:absolute;z-index:0;
-  top:50%;left:50%;transform:translate(-50%,-50%);
-  width:70%;aspect-ratio:850/240;max-width:900px;
-  background-image:url("/iconos/logo-bronx.png");
-  background-size:contain;background-repeat:no-repeat;background-position:center;
-  opacity: 0.15;;filter:(1);
+.hero > *:not(.hero-bg){position:relative;z-index:1}
+/* Fondo del hero: la foto del evento destacado, grande, desenfocada y
+   oscurecida con una capa negra encima — mismo tratamiento que .detail-bg,
+   pero vive adentro de la sección en vez de fijo a toda la ventana.
+   pintarFondoHero() (app.js) elige el primer próximo evento con foto.
+   Sin evento con foto, .sin-foto cae en el logo bien atenuado. */
+.hero-bg{
+  position:absolute;inset:-80px;z-index:0;
+  background-size:cover;background-position:center;
+  filter:blur(72px);
   pointer-events:none;
 }
-.hero > *{position:relative;z-index:1}
+.hero-bg::after{content:"";position:absolute;inset:0;background:rgba(8,8,10,.75)}
+.hero-bg.sin-foto{
+  background-image:url("/iconos/logo-bronx.png");
+  background-size:46% auto;background-repeat:no-repeat;background-position:center;
+  filter:none;opacity:.05;
+}
+.hero-bg.sin-foto::after{display:none}
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
   color:var(--text-dim);margin-bottom:16px;
@@ -265,17 +271,23 @@ body > nav{
 /* ---------- DETALLE DE EVENTO ----------
    Dos columnas: 60% info y tickets, 40% el flyer pegado al scroll. */
 #page-detalle{position:relative;min-height:100vh}
-/* La foto del evento de fondo, difuminada y muy oscurecida. Es la única
-   imagen de fondo del sitio; no lleva ningún tinte de color encima. */
+/* La foto del evento de fondo, grande y desenfocada, con una capa negra
+   plana al 75% encima — deja que el color de la foto tiña el fondo (el
+   atardecer naranja de una playa, el marrón dorado de un mapa) en vez de
+   aplastarlo a negro. Sin filter:brightness ni degradado: sólo blur + una
+   capa pareja, para no perder ese tinte. */
 .detail-bg{
-  position:fixed;inset:0;z-index:-1;
+  position:fixed;inset:-80px;z-index:-1;
   background-size:cover;background-position:center;
-  filter:blur(72px) brightness(.18);transform:scale(1.25);
+  filter:blur(72px);
 }
-.detail-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,10,.75),rgba(8,8,10,.97))}
-/* Evento sin foto: la capa se corre entera para que se vea la luz de
-   ambiente del body, en vez de taparla con un negro opaco. */
-.detail-bg:not([style*="background-image"]){background:transparent}
+.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(8,8,10,.75)}
+/* Evento sin foto: el logo atenuado, mismo tratamiento que .hero-bg.sin-foto */
+.detail-bg:not([style*="background-image"]){
+  background-image:url("/iconos/logo-bronx.png");
+  background-size:46% auto;background-repeat:no-repeat;background-position:center;
+  filter:none;opacity:.05;
+}
 .detail-bg:not([style*="background-image"])::after{display:none}
 .detail-wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:32px 24px 64px}
 .detail-cols{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:48px;align-items:start}
@@ -300,6 +312,15 @@ body > nav{
 .secret-box b{color:var(--text)}
 .map-wrap{border:1px solid var(--border);border-radius:var(--radio-card);overflow:hidden;line-height:0;background:var(--surface);min-height:280px}
 .map-wrap iframe{width:100%;height:280px;border:0;display:block}
+/* El embed básico de Google Maps (maps?...&output=embed, sin API key) no
+   admite un estilo de mapa propio — eso pide la Maps JavaScript API con una
+   key paga, algo que este proyecto no tiene. Esto lo reskinea con un filtro
+   CSS: invert+hue-rotate da vuelta los colores del mapa a algo oscuro y
+   apagado sin depender de ningún servicio nuevo. Por la vuelta de color, el
+   pin rojo de Google termina de un celeste apagado — coincidencia útil, no
+   truco aparte. El filtro pega en TODO lo que renderiza el iframe (controles
+   de zoom, el cartel de Google incluido), es la limitación del método. */
+.map-wrap iframe{filter:invert(90%) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6)}
 
 .detail-right{position:sticky;top:24px}
 .d-flyer{
