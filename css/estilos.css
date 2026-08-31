@@ -297,9 +297,14 @@ body > nav{
 .hero-tinte[data-tinte="naranja"]{background:
   radial-gradient(ellipse 60% 45% at 20% 0%, rgba(255,107,53,0.10), transparent 70%),
   radial-gradient(ellipse 32% 24% at 50% 100%, rgba(247,147,30,0.16), transparent 70%)}
+/* El slide "rojo" desatura el logo de fondo (ver .hero[data-tinte="rojo"]::before
+   más abajo), así que a diferencia de "naranja" —que ya arranca de un logo
+   naranja— acá TODO el color rojo sale de este tinte. Al mismo alfa que el
+   de arriba quedaba casi idéntico al slide "neutro" (sin tinte): subido
+   bastante más fuerte para que se lea como rojo sin dudas. */
 .hero-tinte[data-tinte="rojo"]{background:
-  radial-gradient(ellipse 60% 45% at 20% 0%, rgba(255,59,48,0.10), transparent 70%),
-  radial-gradient(ellipse 32% 24% at 50% 100%, rgba(193,18,31,0.16), transparent 70%)}
+  radial-gradient(ellipse 65% 50% at 20% 0%, rgba(255,59,48,0.30), transparent 70%),
+  radial-gradient(ellipse 38% 30% at 50% 100%, rgba(193,18,31,0.42), transparent 70%)}
 
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
@@ -379,9 +384,14 @@ body > nav{
   border-radius:var(--radio-card);overflow:hidden;
   background-size:cover;background-position:center;
 }
-/* Sin foto: superficie plana, sin degradado de marca */
-.art.red{background:var(--surface-2)}
-.art.white{background:var(--text)}
+/* Sin foto: nada de caja sólida — transparente, con el nombre del evento
+   centrado (las únicas "letras") y un borde punteado apenas para marcar el
+   4:5 en la grilla, mismo tratamiento que .empty en el resto del sitio. */
+.art.red,.art.white{
+  background:transparent;border:1px dashed var(--border);
+  display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
+}
+.art-name{color:var(--text);font-size:1.125rem;font-weight:600;letter-spacing:-0.01em;line-height:1.35}
 .tag-soldout{
   position:absolute;top:12px;right:12px;z-index:2;
   background:rgba(8,8,10,.72);border:1px solid var(--border);border-radius:999px;

@@ -260,6 +260,7 @@ async function loadEvents(){
     const horario = [ev.fecha_texto, ev.puertas].filter(Boolean).join(" · ");
     el.innerHTML = `
       <div class="art ${artClass}" ${artStyle}>
+        ${ev.foto_url ? "" : `<span class="art-name">${esc(ev.nombre)}</span>`}
         ${agotado ? '<span class="tag-soldout">Agotado</span>' : ""}
       </div>
       <div class="ticket-info">
