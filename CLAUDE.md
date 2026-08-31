@@ -113,6 +113,7 @@ Tables (defined in `sql/01-tablas.sql`, policies in `sql/02-rls.sql`):
 - `galeria` — photos/videos attached to a past event (`evento_id`, `tipo`: `foto`|`video`, `url`, `orden`). The table and its RLS policies stay; nothing in the app reads or writes it right now — see "Current status".
 - `perfiles` — user profile mirror (name/surname/phone), filled by an `auth.users` trigger, read by the admin panel's "Usuarios registrados" table.
 - `staff` — emails with scanner/admin-panel access (see Roles).
+- `patrocinadores` — sponsors shown as a grayscale logo marquee on the homepage, below the events grid (defined in `sql/patrocinadores.sql`, not `01-tablas.sql`): `nombre`, `logo_url` (bucket `fotos`), `link` (optional), `orden`, `activo`. Managed from the Studio's "Patrocinadores" tab, admin-only.
 - `ventas_por_tipo` — **view**, not a table: approved ticket counts per `tipo_ticket_id`, the only purchase data `anon` may read (see below).
 
 None of this exists yet in a live database — the SQL has not been run.
@@ -191,6 +192,7 @@ Never widen this to expose per-row purchase data to `anon`.
 - **SQL against Supabase gets applied, not just written.** When you generate or edit SQL meant for this project's Supabase database, run it against the live database yourself through the connected Supabase MCP (`apply_migration` for DDL, `execute_sql` for one-off queries/data) as part of the same task. Don't leave a new or edited `.sql` file in `sql/` unapplied on the assumption someone will run it by hand later.
 - Still keep `sql/` as the source of truth: write the file first, then apply it, so the repo and the live database never drift apart.
 - Report back at the end of the task exactly what got applied (which statements/migrations) and flag anything that failed to apply, instead of just saying the SQL was written.
+- **Deploy when you're done.** After finishing any change and confirming it didn't break anything, run `wrangler deploy` yourself to publish the site — don't leave that step pending for the user, unless something about the change is worth having them review before it goes live.
 
 ## Conventions
 

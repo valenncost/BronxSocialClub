@@ -308,10 +308,6 @@ body > nav{
 .hero-glow[data-tinte="rojo"]{background:linear-gradient(135deg,#FF3B30,#C1121F)}
 .hero-glow[data-tinte="neutro"]{background:#FFFFFF}
 
-.eyebrow{
-  font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
-  color:var(--text-dim);margin-bottom:16px;
-}
 /* Carrusel de título+bajada: los tres slides ocupan la misma celda de grid
    (así el contenedor mide lo que mide el más alto, sin saltos de layout al
    rotar) y se cruzan con opacity. El delay en visibility deja que el saliente
@@ -717,6 +713,7 @@ body > nav{
 .ev-admin-item .info b{display:block;font-weight:600}
 .ev-admin-item .info span{font-size:0.8125rem;color:var(--text-dim)}
 .ev-admin-item .row-actions{display:flex;gap:8px}
+.ev-admin-item .thumb-mini{width:44px;height:44px;object-fit:contain;border-radius:var(--radio-campo);border:1px solid var(--border);background:var(--surface-2);flex-shrink:0}
 .tipo-counts{font-size:0.8125rem;color:var(--text-dim);margin-top:4px;line-height:1.7}
 
 /* ---------- PANEL: GRILLA DE EVENTOS ----------
@@ -847,6 +844,37 @@ body.app-instalada{padding-bottom:env(safe-area-inset-bottom,0px)}
 .gal-publica iframe{width:100%;height:100%;border:0;display:block}
 .gal-video video{width:100%;height:100%;object-fit:cover;border-radius:var(--radio-card);background:#000}
 
+/* ---------- PATROCINADORES ----------
+   Fila de logos en escala de grises que se recolorean al hover, en loop
+   horizontal infinito. El track duplica la lista de sponsors una vez
+   (loadPatrocinadores() en app.js) y anima -50% para que el segundo tramo
+   empalme exacto con el primero, sin salto. prefers-reduced-motion ya mata
+   toda animación de forma global (ver MOVIMIENTO REDUCIDO más abajo), así
+   que acá no hace falta una regla aparte para dejar la fila estática. */
+.patrocinadores{padding:16px 24px 0}
+.patrocinadores-titulo{
+  font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--text-dim);text-align:center;margin-bottom:24px;
+}
+.marquee{
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+}
+.marquee-track{
+  display:flex;align-items:center;gap:56px;width:max-content;
+  animation:patrocinadores-scroll 28s linear infinite;
+}
+.marquee:hover .marquee-track{animation-play-state:paused}
+.marquee-item{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.marquee-item img{
+  display:block;height:40px;max-width:140px;object-fit:contain;
+  filter:grayscale(1);opacity:0.5;
+  transition:filter 200ms ease,opacity 200ms ease;
+}
+.marquee-item:hover img,.marquee-item img:focus-visible{filter:grayscale(0);opacity:1}
+@keyframes patrocinadores-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
 /* ---------- FOOTER ---------- */
 footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;color:var(--text-faint);font-size:0.8125rem}
 .footer-logo{height:26px;width:auto;display:block;margin:0 auto 16px}
@@ -869,6 +897,9 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .tabs{order:3;width:100%;justify-content:flex-start;gap:4px}
   .tab{padding:8px 12px;font-size:0.8125rem}
   .grid{grid-template-columns:1fr}
+  .patrocinadores{padding:8px 16px 0}
+  .marquee-track{gap:36px}
+  .marquee-item img{height:26px;max-width:96px}
   .form-grid{grid-template-columns:1fr}
   .detail-wrap{padding:24px 16px 48px}
   .d-bloque{margin-top:40px}

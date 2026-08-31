@@ -35,7 +35,6 @@
       <div class="hero-bg-slide" data-tinte="rojo" style="background-image:url('/iconos/jueves-picante.jpg')"></div>
       <div class="hero-bg-slide" data-tinte="neutro" style="background-image:url('/iconos/bronx-general.jpg')"></div>
     </div>
-    <p class="eyebrow">bronx social club · bahía blanca</p>
     <div class="hero-slides" id="hero-slides">
       <span class="hero-glow activo" data-tinte="naranja" aria-hidden="true"></span>
       <span class="hero-glow" data-tinte="rojo" aria-hidden="true"></span>
@@ -60,6 +59,14 @@
     <h2>Eventos</h2>
     <p class="sub">Tocá un evento para ver los detalles. Todas las entradas incluyen QR nominado.</p>
     <div class="grid" id="grid"><div class="loading">Cargando eventos...</div></div>
+  </section>
+
+  <!-- Se muestra sólo si hay sponsors activos: loadPatrocinadores() la revela -->
+  <section class="patrocinadores" id="patrocinadores-sec" style="display:none">
+    <p class="patrocinadores-titulo">Nuestros sponsors</p>
+    <div class="marquee" id="patrocinadores-marquee">
+      <div class="marquee-track" id="patrocinadores-track"></div>
+    </div>
   </section>
 
   <!-- "Eventos pasados" sacado de la portada (pendiente reemplazo por una

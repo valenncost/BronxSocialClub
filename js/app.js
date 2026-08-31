@@ -83,6 +83,9 @@ const DEMO_TIPOS = [
   {id:104, evento_id:1, nombre:"5 ACCESOS + BOTELLA DE FERNET", descripcion:"Branca 1L con Coca.", precio:115000, cantidad:10, orden:3, categoria:"combo", accesos:5, activo:true, oculto:false, valido_desde:null, valido_hasta:null},
 ];
 let DEMO_PURCHASES = [];
+const DEMO_PATROCINADORES = [
+  {id:1, nombre:"Cervecería Bronx", logo_url:"/iconos/logo-bronx.png", link:null, orden:0, activo:true},
+];
 
 let EVENTS = [];
 let PURCHASES = [];
@@ -271,6 +274,29 @@ async function loadEvents(){
   });
 }
 // [loadEvents(); -> ahora se llama desde initPage()]
+
+/* ---------- PATROCINADORES (fila de logos, debajo de los eventos) ----------
+   El track se arma con la lista de sponsors DUPLICADA una vez, seguida: la
+   animación CSS (patrocinadores-scroll en estilos.css) corre translateX de
+   0 a -50%, así el segundo tramo empalma exacto con el primero y el loop no
+   se nota. Sin sponsors activos, la sección entera queda oculta. */
+let PATROCINADORES_PUB = [];
+async function loadPatrocinadores(){
+  const sec = document.getElementById("patrocinadores-sec");
+  if(!sec) return;
+  try{
+    PATROCINADORES_PUB = DEMO ? DEMO_PATROCINADORES : await dbGet("patrocinadores", "activo=eq.true&order=orden.asc");
+  }catch(e){ PATROCINADORES_PUB = []; }
+  if(!PATROCINADORES_PUB.length){ sec.style.display = "none"; return; }
+  const track = document.getElementById("patrocinadores-track");
+  const item = p => {
+    const img = `<img src="${esc(p.logo_url)}" alt="${esc(p.nombre)}" loading="lazy">`;
+    return `<div class="marquee-item">${p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener noreferrer">${img}</a>` : img}</div>`;
+  };
+  const html = PATROCINADORES_PUB.map(item).join("");
+  track.innerHTML = html + html;
+  sec.style.display = "";
+}
 
 /* ================== CARRUSEL DEL HERO ==================
    Título + bajada rotan cada 4s con cross-fade de 600ms (CSS, vía la clase
@@ -877,11 +903,12 @@ async function determinarRol(email, token){
    sección de HTML (id="sec-pasados") y todo su JS quedaron comentados más
    abajo, no borrados. */
 const SECCIONES_ADMIN = [
-  { clave:"resumen",     titulo:"Resumen" },
-  { clave:"eventos",     titulo:"Eventos" },
-  { clave:"compradores", titulo:"Compradores" },
-  { clave:"usuarios",    titulo:"Usuarios" },
-  { clave:"equipo",      titulo:"Equipo" }
+  { clave:"resumen",        titulo:"Resumen" },
+  { clave:"eventos",        titulo:"Eventos" },
+  { clave:"compradores",    titulo:"Compradores" },
+  { clave:"usuarios",       titulo:"Usuarios" },
+  { clave:"equipo",         titulo:"Equipo" },
+  { clave:"patrocinadores", titulo:"Patrocinadores" }
 ];
 let SECCION_ADMIN = "resumen";
 
@@ -890,8 +917,8 @@ function aplicarRol(){
   // Ojo: además de la sección hay que esconder su botón del sidebar, si no
   // el staff ve pestañas que lo llevan a un panel vacío.
   const soloAdmin = [
-    "sec-eventos","sec-usuarios","sec-equipo","btn-borrar-pend",
-    "nav-eventos","nav-usuarios","nav-equipo","btn-crear-evento"
+    "sec-eventos","sec-usuarios","sec-equipo","sec-patrocinadores","btn-borrar-pend",
+    "nav-eventos","nav-usuarios","nav-equipo","nav-patrocinadores","btn-crear-evento"
   ];
   soloAdmin.forEach(id=>{
     const el = document.getElementById(id);
@@ -952,7 +979,7 @@ async function abrirPanel(){
   if(ROL==="admin"){
     await cargarTipos(true);   // el panel también edita los tipos pausados
     renderTiposForm();
-    renderEventAdmin(); loadUsuarios(); loadStaff();
+    renderEventAdmin(); loadUsuarios(); loadStaff(); loadPatrocinadoresAdmin();
   }
 }
 
@@ -1764,6 +1791,116 @@ async function agregarStaff(){
 async function quitarStaff(id){
   if(!confirm("¿Quitar a esta persona del equipo?")) return;
   try{ await dbDelete("staff", id); loadStaff(); }catch(e){ alert("No se pudo quitar: "+e.message); }
+}
+
+/* ================== PATROCINADORES (Studio) ==================
+   Mismo patrón que Equipo: un formulario de alta/edición arriba, lista abajo.
+   El logo se sube al bucket "fotos" (el mismo de las portadas de evento). */
+let PATROCINADORES = [];
+async function loadPatrocinadoresAdmin(){
+  if(DEMO){ PATROCINADORES = DEMO_PATROCINADORES.slice(); drawPatrocinadoresAdmin(); return; }
+  try{ PATROCINADORES = await dbGet("patrocinadores", "order=orden.asc"); }catch(e){ PATROCINADORES=[]; }
+  drawPatrocinadoresAdmin();
+}
+function drawPatrocinadoresAdmin(){
+  const box = document.getElementById("pt-list");
+  if(!box) return;
+  box.innerHTML = PATROCINADORES.map(p=>`
+    <div class="ev-admin-item">
+      <img src="${esc(p.logo_url)}" alt="" class="thumb-mini">
+      <div class="info">
+        <b>${esc(p.nombre)}</b>
+        <span>${p.activo ? "Activo" : "Pausado"} · orden ${p.orden}${p.link ? " · " + esc(p.link) : ""}</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn ghost btn-mini" onclick="editarPatrocinador(${p.id})">Editar</button>
+        <button class="btn ghost btn-mini" onclick="togglePatrocinadorActivo(${p.id})">${p.activo ? "Pausar" : "Activar"}</button>
+        <button class="btn ghost btn-mini" onclick="borrarPatrocinador(${p.id})">Borrar</button>
+      </div>
+    </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no cargaste ningún sponsor.</p>`;
+}
+function previewLogoPatrocinador(){
+  const f = document.getElementById("pt-logo").files[0];
+  const img = document.getElementById("pt-thumb");
+  if(f){ img.src = URL.createObjectURL(f); img.style.display="block"; }
+}
+function resetPatrocinadorForm(){
+  ["pt-id","pt-nombre","pt-link","pt-logo-url"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("pt-orden").value = PATROCINADORES.length;
+  document.getElementById("pt-activo").checked = true;
+  document.getElementById("pt-logo").value = "";
+  const thumb = document.getElementById("pt-thumb");
+  thumb.src = ""; thumb.style.display = "none";
+  document.getElementById("pt-form-title").textContent = "Nuevo sponsor";
+  document.getElementById("pt-err").style.display="none";
+  document.getElementById("pt-ok").style.display="none";
+}
+function editarPatrocinador(id){
+  const p = PATROCINADORES.find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById("pt-id").value = p.id;
+  document.getElementById("pt-nombre").value = p.nombre || "";
+  document.getElementById("pt-link").value = p.link || "";
+  document.getElementById("pt-orden").value = p.orden || 0;
+  document.getElementById("pt-activo").checked = !!p.activo;
+  document.getElementById("pt-logo-url").value = p.logo_url || "";
+  const thumb = document.getElementById("pt-thumb");
+  if(p.logo_url){ thumb.src = p.logo_url; thumb.style.display="block"; } else { thumb.style.display="none"; }
+  document.getElementById("pt-form-title").textContent = "Editar sponsor";
+  document.getElementById("pt-form").scrollIntoView({behavior:"smooth", block:"start"});
+}
+async function guardarPatrocinador(){
+  const err = document.getElementById("pt-err"), ok = document.getElementById("pt-ok");
+  err.style.display="none"; ok.style.display="none";
+  const id = document.getElementById("pt-id").value;
+  const nombre = document.getElementById("pt-nombre").value.trim();
+  const link = document.getElementById("pt-link").value.trim();
+  const orden = parseInt(document.getElementById("pt-orden").value, 10) || 0;
+  const activo = document.getElementById("pt-activo").checked;
+  let logoUrl = document.getElementById("pt-logo-url").value;
+  const file = document.getElementById("pt-logo").files[0];
+
+  if(!nombre){ err.textContent="Poné el nombre del sponsor."; err.style.display="block"; return; }
+  if(!file && !logoUrl){ err.textContent="Subí el logo."; err.style.display="block"; return; }
+
+  const btn = document.getElementById("pt-save-btn");
+  btn.disabled = true; btn.textContent = "Guardando...";
+  try{
+    if(file){ logoUrl = DEMO ? URL.createObjectURL(file) : await uploadFoto(file); }
+    const row = { nombre, logo_url: logoUrl, link: link || null, orden, activo };
+    if(DEMO){
+      if(id) Object.assign(PATROCINADORES.find(x=>x.id==id), row);
+      else PATROCINADORES.push({ id: Date.now(), ...row });
+    } else if(id){
+      await dbUpdate("patrocinadores", id, row);
+    } else {
+      await dbInsert("patrocinadores", row);
+    }
+    ok.textContent = "Guardado."; ok.style.display="block";
+    resetPatrocinadorForm();
+    loadPatrocinadoresAdmin();
+  }catch(e){
+    err.textContent = "No se pudo guardar: " + e.message; err.style.display="block";
+  }finally{
+    btn.disabled = false; btn.textContent = "Guardar sponsor";
+  }
+}
+async function togglePatrocinadorActivo(id){
+  const p = PATROCINADORES.find(x=>x.id===id);
+  if(!p) return;
+  try{
+    if(DEMO) p.activo = !p.activo;
+    else await dbUpdate("patrocinadores", id, { activo: !p.activo });
+    loadPatrocinadoresAdmin();
+  }catch(e){ alert("No se pudo: " + e.message); }
+}
+async function borrarPatrocinador(id){
+  if(!confirm("¿Borrar este sponsor?")) return;
+  try{
+    if(DEMO) PATROCINADORES = PATROCINADORES.filter(x=>x.id!==id);
+    else await dbDelete("patrocinadores", id);
+    loadPatrocinadoresAdmin();
+  }catch(e){ alert("No se pudo borrar: " + e.message); }
 }
 
 /* ================== ESCÁNER DE ENTRADAS ================== */
@@ -2732,6 +2869,7 @@ async function initPage(){
     await cargarTipos();
     await cargarVentasTipo();
     await loadEvents();
+    loadPatrocinadores();
     checkReturnFromPayment();
 
     // Si la URL apunta a un evento, abrirlo directo (deep link / recarga)

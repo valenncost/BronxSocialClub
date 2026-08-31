@@ -22,6 +22,7 @@ bases que ya existían antes del cambio.
 | Archivo | Qué hace |
 |---|---|
 | `color-evento.sql` | Agrega `eventos.color_acento` (el color de acento propio de cada evento) |
+| `patrocinadores.sql` | Tabla `patrocinadores` (fila de logos en la portada, debajo de los eventos) |
 
 ## Antes de correrlos: cambiar el mail del admin
 
