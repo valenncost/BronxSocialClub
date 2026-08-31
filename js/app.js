@@ -1003,6 +1003,18 @@ async function restoreAdminSession(){
 // [restoreAdminSession(); -> ahora se llama desde initPage()]
 
 /* ================== ADMIN: EVENTOS ================== */
+// Vendidas totales de un evento y, si TODOS sus tipos tienen cupo, el total
+// de ese cupo — para la barra de progreso de la tarjeta. Si algún tipo no
+// tiene límite (cantidad null), la suma "sobre qué" deja de tener sentido:
+// se muestra sólo el número vendido, sin barra ni "/Y".
+function progresoEvento(ev){
+  const tipos = tiposDeEvento(ev.id);
+  const vendidas = tipos.reduce((a,t) => a + vendidasTipo(t), 0);
+  const todosConCupo = tipos.length > 0 && tipos.every(t => t.cantidad != null);
+  const cupo = todosConCupo ? tipos.reduce((a,t) => a + Number(t.cantidad), 0) : null;
+  const pct = cupo ? Math.min(100, Math.round(vendidas / cupo * 100)) : null;
+  return { tipos, vendidas, cupo, pct };
+}
 function renderEventAdmin(){
   const list = document.getElementById("ev-admin-list");
   const aviso = (!DEMO && !VENTAS_VISTA_OK)
@@ -1010,27 +1022,59 @@ function renderEventAdmin(){
     : "";
   if(EVENTS.length===0){ list.innerHTML = aviso + `<p style="color:var(--text-dim);font-size:14px">No hay eventos. Creá el primero abajo.</p>`; return; }
   list.innerHTML = aviso + EVENTS.map(ev=>{
-    const tipos = tiposDeEvento(ev.id);
-    const desde = precioDesde(ev);
-    // Vendidas sobre el cupo de cada tipo, ej: "GENERAL 1 38/50"
-    const detalleVentas = tipos.length
-      ? tipos.map(t=>{
-          const v = vendidasTipo(t);
-          return `${esc(t.nombre)} ${v}${t.cantidad != null ? "/" + t.cantidad : ""}${t.activo ? "" : " (pausado)"}`;
-        }).join(" · ")
-      : "sin tipos de entrada cargados";
+    const { tipos, vendidas, cupo, pct } = progresoEvento(ev);
+    let progreso;
+    if(tipos.length === 0){
+      progreso = `<p class="evento-card-progreso-txt sutil">Sin tipos de entrada cargados</p>`;
+    } else if(cupo != null){
+      progreso = `
+        <div class="evento-card-progreso-track"><div class="evento-card-progreso-fill" style="width:${pct}%"></div></div>
+        <p class="evento-card-progreso-txt">${vendidas}/${cupo} vendidas</p>`;
+    } else {
+      progreso = `<p class="evento-card-progreso-txt">${vendidas} vendida${vendidas===1?"":"s"}</p>`;
+    }
+    const badges = [
+      eventoAgotado(ev) ? `<span class="pill" style="border-color:var(--accent);color:var(--accent)">Agotado</span>` : "",
+      ev.ubicacion_secreta ? `<span class="pill">Secreta</span>` : ""
+    ].filter(Boolean).join(" ");
     return `
-    <div class="ev-admin-item">
-      <div class="info">
-        <b>${esc(ev.nombre)}</b> ${ev.pasado?'<span class="pill" style="border-color:var(--text-dim);color:var(--text-dim)">PASADO</span>':''}
-        <span>${esc(ev.fecha_texto)} · ${tipos.length} tipo(s) ${desde != null ? `· desde <b style="color:var(--accent)">${fmt(desde)}</b>` : ""} ${eventoAgotado(ev)?'· AGOTADO':''} ${ev.ubicacion_secreta?'· secreta':''}</span>
-        <span class="tipo-counts">Vendidas → ${detalleVentas}</span>
+    <article class="evento-card">
+      <div class="evento-card-portada" ${ev.foto_url ? `style="background-image:url('${ev.foto_url}')"` : ""}></div>
+      <div class="evento-card-body">
+        <div class="evento-card-head">
+          <h4>${esc(ev.nombre)}</h4>
+          ${badges}
+        </div>
+        <p class="evento-card-fecha">${esc(ev.fecha_texto || "Sin fecha cargada")}</p>
+        <div class="evento-card-progreso">${progreso}</div>
+        <div class="evento-card-acciones">
+          <button class="btn ghost btn-mini" onclick="editEvento(${ev.id})">Editar</button>
+          <button class="btn ghost btn-mini" onclick="duplicarEvento(${ev.id})">Duplicar</button>
+          <button class="btn ghost btn-mini" onclick="verEventoPublico(${ev.id})">Ver</button>
+          <button class="btn ghost btn-mini" onclick="deleteEvento(${ev.id})" style="border-color:rgba(239,68,68,.4);color:#ef4444">Borrar</button>
+        </div>
       </div>
-      <div class="row-actions">
-        <button class="btn ghost" onclick="editEvento(${ev.id})">Editar</button>
-        <button class="btn ghost" onclick="deleteEvento(${ev.id})">Borrar</button>
-      </div>
-    </div>`;}).join("");
+    </article>`;}).join("");
+}
+// Abre la página pública del evento en una pestaña nueva, tal cual la ve un comprador
+function verEventoPublico(id){
+  window.open("/?evento=" + id, "_blank");
+}
+// Precarga el formulario de "Nuevo evento" con los datos de otro evento ya
+// cargado (tipos de entrada incluidos) para no repetir todo a mano. No
+// escribe nada en la base hasta que el admin apriete "Guardar evento": es
+// el mismo editEvento() de siempre, sólo que sin el id del evento ni los
+// ids de sus tipos, así saveEvento() los inserta como filas nuevas en vez
+// de pisar el original.
+function duplicarEvento(id){
+  const ev = EVENTS.find(e => e.id === id);
+  if(!ev) return;
+  editEvento(id);
+  document.getElementById("ev-id").value = "";
+  document.getElementById("ev-nombre").value = (ev.nombre || "") + " (copia)";
+  TIPOS_FORM.forEach(t => t.id = null);
+  document.getElementById("form-title").textContent = "Duplicando evento — revisá y guardá";
+  document.getElementById("ev-save-btn").textContent = "Guardar evento";
 }
 
 /* ---------- Gestor de tipos de entrada ----------

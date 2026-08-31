@@ -614,6 +614,29 @@ body > nav{
 .ev-admin-item .row-actions{display:flex;gap:8px}
 .tipo-counts{font-size:0.8125rem;color:var(--text-dim);margin-top:4px;line-height:1.7}
 
+/* ---------- PANEL: GRILLA DE EVENTOS ----------
+   Sólo "Eventos" (los próximos, en venta) usa tarjetas con portada; los
+   pasados y el equipo siguen en .ev-admin-list — no necesitan ese peso
+   visual, son registros de consulta más que algo que se gestiona a diario. */
+.eventos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
+.evento-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  overflow:hidden;display:flex;flex-direction:column;
+  transition:background var(--transicion),border-color var(--transicion);
+}
+.evento-card:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+.evento-card-portada{height:140px;background-size:cover;background-position:center;background-color:var(--surface-2)}
+.evento-card-body{padding:16px;display:flex;flex-direction:column;flex:1}
+.evento-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px}
+.evento-card-head h4{font-size:0.9375rem;line-height:1.3}
+.evento-card-fecha{color:var(--text-dim);font-size:0.8125rem;margin-bottom:12px}
+.evento-card-progreso{margin-bottom:12px}
+.evento-card-progreso-track{background:var(--surface-2);border-radius:999px;height:6px;overflow:hidden;margin-bottom:6px}
+.evento-card-progreso-fill{background:var(--accent);height:100%;border-radius:999px}
+.evento-card-progreso-txt{color:var(--text-dim);font-size:0.8125rem;margin:0}
+.evento-card-progreso-txt.sutil{color:var(--text-faint)}
+.evento-card-acciones{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+
 /* Pills de estado en tablas y listas */
 .pill,.pill-estado{
   display:inline-block;border:1px solid var(--border);border-radius:999px;
