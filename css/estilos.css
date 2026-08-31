@@ -269,6 +269,22 @@ body > nav{
     linear-gradient(0deg, rgba(13,13,13,.95) 0%, transparent 60%),
     rgba(0,0,0,.25);
 }
+/* Cachengue: la foto trae un logo "BRONX" semi-transparente propio, en la
+   mitad inferior, justo donde cae el texto de bajada — se leía doble. El
+   degradado de acá se queda opaco (.97→.9) hasta la mitad de la foto en vez
+   de empezar a aclarar enseguida, para taparlo del todo detrás del texto. */
+.hero[data-tinte="naranja"] .hero-bg::after{background:
+  linear-gradient(0deg, rgba(13,13,13,.97) 0%, rgba(13,13,13,.9) 45%, transparent 68%),
+  rgba(0,0,0,.25)}
+/* Jueves Picante: el cartel "PICANTE" de la foto (la parte más cargada) cae
+   justo en el tercio superior, donde va el eyebrow gris — se perdía. Un
+   segundo degradado, de arriba hacia abajo esta vez, oscurece sólo ese
+   tercio; el de abajo hacia arriba se deja igual porque el lockup del logo
+   ya se lee bien ahí. */
+.hero[data-tinte="rojo"] .hero-bg::after{background:
+  linear-gradient(0deg, rgba(13,13,13,.95) 0%, transparent 60%),
+  linear-gradient(180deg, rgba(13,13,13,.75) 0%, transparent 35%),
+  rgba(0,0,0,.25)}
 
 /* Glow de color detrás del título: un blob difuminado con el degradado (o
    blanco) del slide activo, sutil a propósito (0.35 de opacidad final —
