@@ -574,9 +574,28 @@ body > nav{
 }
 
 /* ---------- PANEL: MÉTRICAS Y LISTAS ---------- */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:20px}
-.stat b{font-size:1.75rem;font-weight:600;letter-spacing:-0.02em;display:block;margin-bottom:4px}
+/* Tarjeta de métrica: label chico arriba, número grande abajo, barra de
+   acento de 3px arriba de la tarjeta (overflow:hidden para que la barra
+   respete el radio de la esquina en vez de sobresalir cuadrada). */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
+.stat{
+  position:relative;overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  padding:20px;
+}
+.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent)}
+.stat small{display:block;margin-bottom:8px}
+.stat b{font-size:1.75rem;font-weight:600;letter-spacing:-0.02em;display:block}
+
+/* Bloques del Resumen (tarjetas, gráfico, tabla) con el mismo aire entre
+   sí que el resto del dashboard. */
+.resumen-secciones{display:flex;flex-direction:column;gap:24px}
+.resumen-chart-caption{color:var(--text-dim);font-size:0.875rem;margin-bottom:16px}
+.resumen-chart-svg{width:100%;height:200px;display:block}
+.resumen-chart-base{stroke:var(--border);stroke-width:1}
+.resumen-chart-area{fill:rgba(245,140,41,.12);stroke:none}
+.resumen-chart-linea{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.resumen-chart-label{font-size:13px;fill:var(--text-faint)}
 .admin-bar{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:24px}
 .admin-bar input{max-width:280px}
 .filtros-row{display:flex;gap:12px;flex-wrap:wrap;width:100%}

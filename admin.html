@@ -90,11 +90,29 @@
 
         <!-- ---------- RESUMEN ---------- -->
         <div class="admin-section" id="sec-resumen">
-          <div class="stats">
-            <div class="stat"><b id="st-entradas">0</b><small>Entradas vendidas</small></div>
-            <div class="stat"><b id="st-compradores">0</b><small>Compradores</small></div>
-            <div class="stat"><b id="st-total">$0</b><small>Recaudado</small></div>
-            <div class="stat"><b id="st-ingresados">0</b><small>Ya ingresaron</small></div>
+          <div class="resumen-secciones">
+            <div class="stats">
+              <div class="stat"><small>Recaudación total</small><b id="res-recaudado">$0</b></div>
+              <div class="stat"><small>Entradas vendidas</small><b id="res-entradas">0</b></div>
+              <div class="stat"><small>Ticket promedio</small><b id="res-promedio">$0</b></div>
+              <div class="stat"><small>Compradores únicos</small><b id="res-compradores">0</b></div>
+            </div>
+
+            <div class="dash-card">
+              <h3 style="border:none;margin-bottom:4px">Ventas de los últimos 30 días</h3>
+              <p class="resumen-chart-caption" id="resumen-chart-caption"></p>
+              <div id="resumen-chart"></div>
+            </div>
+
+            <div class="dash-card">
+              <h3 style="border:none;margin-bottom:16px">Últimas órdenes</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Comprador</th><th>Evento</th><th>Tipo</th><th>Total</th><th>Estado</th></tr></thead>
+                  <tbody id="resumen-ordenes"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
 

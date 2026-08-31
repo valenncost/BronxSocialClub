@@ -1361,6 +1361,7 @@ async function loadPurchases(){
     selTipo.innerHTML = `<option value="">Todos los tipos</option>` + tipos.map(t=>`<option value="${esc(t)}"${t===actual?" selected":""}>${esc(t)}</option>`).join("");
   }
   drawAdmin();
+  renderResumenDashboard();
 }
 function estadoPill(estado){
   const e = (estado||"pendiente").toLowerCase();
@@ -1459,13 +1460,6 @@ function drawAdmin(){
 
   dibujarResumenTipos(rows);
 
-  // Tarjetas de arriba: totales de TODO, sin filtrar
-  const g = totales(PURCHASES);
-  document.getElementById("st-entradas").textContent = g.entradas;
-  document.getElementById("st-compradores").textContent = g.compradores;
-  document.getElementById("st-total").textContent = fmt(g.recaudado);
-  document.getElementById("st-ingresados").textContent = g.ingresados;
-
   // Línea de resumen de lo que se está viendo ahora
   const s = totales(rows);
   const res = document.getElementById("resumen-filtro");
@@ -1508,6 +1502,91 @@ function exportCSV(){
   const blob = new Blob(["﻿"+head+body],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "compradores-bronx.csv"; a.click();
+}
+
+/* ================== ADMIN: RESUMEN ==================
+   Las 4 métricas, el gráfico de ventas y las últimas órdenes son sólo
+   lectura de PURCHASES — se repintan junto con drawAdmin() cada vez que
+   loadPurchases() trae datos nuevos, no tienen su propio fetch. */
+
+// Un balde por día, los últimos `dias` días (incluido hoy), en orden
+// cronológico. Sólo suma compras aprobadas — lo mismo que cuenta totales().
+function serieVentasDiarias(dias){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const buckets = [];
+  for(let i = dias - 1; i >= 0; i--){
+    const fecha = new Date(hoy); fecha.setDate(fecha.getDate() - i);
+    buckets.push({ fecha, total: 0 });
+  }
+  const porDia = new Map(buckets.map(b => [b.fecha.toDateString(), b]));
+  PURCHASES.filter(esAprobada).forEach(c=>{
+    if(!c.creado_en) return;
+    const d = new Date(c.creado_en); d.setHours(0,0,0,0);
+    const b = porDia.get(d.toDateString());
+    if(b) b.total += Number(c.total) || 0;
+  });
+  return buckets;
+}
+
+// Gráfico de línea nativo, sin librerías: un <svg> con viewBox fijo y
+// preserveAspectRatio="none" para que estire al ancho real de la tarjeta.
+function svgVentasChart(buckets){
+  const W = 720, H = 200, padB = 26, padT = 12, padX = 4;
+  const n = buckets.length;
+  const max = Math.max(1, ...buckets.map(b => b.total));
+  const xAt = i => padX + (W - padX*2) * (i / (n - 1 || 1));
+  const yAt = v => padT + (H - padT - padB) * (1 - v / max);
+  const base = yAt(0);
+  const linea = buckets.map((b,i) => `${xAt(i).toFixed(1)},${yAt(b.total).toFixed(1)}`).join(" ");
+  const area = `${padX},${base.toFixed(1)} ${linea} ${xAt(n-1).toFixed(1)},${base.toFixed(1)}`;
+  const corta = d => d.toLocaleDateString("es-AR", {day:"numeric", month:"short"});
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="resumen-chart-svg" role="img" aria-label="Ventas por día, últimos ${n} días">
+    <line x1="${padX}" y1="${base.toFixed(1)}" x2="${W-padX}" y2="${base.toFixed(1)}" class="resumen-chart-base"/>
+    <polygon points="${area}" class="resumen-chart-area"/>
+    <polyline points="${linea}" class="resumen-chart-linea"/>
+    <text x="${padX}" y="${H-6}" class="resumen-chart-label">${esc(corta(buckets[0].fecha))}</text>
+    <text x="${W-padX}" y="${H-6}" text-anchor="end" class="resumen-chart-label">${esc(corta(buckets[n-1].fecha))}</text>
+  </svg>`;
+}
+
+function renderResumenDashboard(){
+  const cRec = document.getElementById("res-recaudado");
+  if(!cRec) return;   // esta sección no está en el documento (u otra página)
+
+  const g = totales(PURCHASES);
+  const promedio = g.entradas ? Math.round(g.recaudado / g.entradas) : 0;
+  cRec.textContent = fmt(g.recaudado);
+  document.getElementById("res-entradas").textContent = g.entradas;
+  document.getElementById("res-promedio").textContent = fmt(promedio);
+  document.getElementById("res-compradores").textContent = g.compradores;
+
+  const buckets = serieVentasDiarias(30);
+  const totalPeriodo = buckets.reduce((a,b) => a + b.total, 0);
+  const caption = document.getElementById("resumen-chart-caption");
+  if(caption) caption.textContent = `Recaudado en los últimos 30 días: ${fmt(totalPeriodo)}`;
+  const chart = document.getElementById("resumen-chart");
+  if(chart){
+    chart.innerHTML = totalPeriodo > 0
+      ? svgVentasChart(buckets)
+      : `<p class="loading" style="padding:32px 0">Todavía no hay ventas para graficar.</p>`;
+  }
+
+  // Las 10 compras más recientes, cualquiera sea su estado (igual que la
+  // tabla de Compradores por defecto) — no sólo las aprobadas.
+  const ordenes = [...PURCHASES]
+    .sort((a,b) => new Date(b.creado_en||0) - new Date(a.creado_en||0))
+    .slice(0, 10);
+  const tbOrdenes = document.getElementById("resumen-ordenes");
+  if(tbOrdenes){
+    tbOrdenes.innerHTML = ordenes.map(c => `
+      <tr>
+        <td><b>${esc(c.nombre)} ${esc(c.apellido)}</b></td>
+        <td>${esc(c.evento)}</td>
+        <td>${esc(nombreTipo(c))}</td>
+        <td>${fmt(c.total)}</td>
+        <td>${estadoPill(c.estado)}</td>
+      </tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px">Todavía no hay órdenes</td></tr>`;
+  }
 }
 
 /* ================== USUARIOS REGISTRADOS (ADMIN) ================== */
