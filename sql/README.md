@@ -13,6 +13,16 @@ desde el SQL Editor:
 Se pueden correr de nuevo sin romper nada: todo es `create ... if not exists` /
 `create or replace` / `drop policy if exists`.
 
+### Parches sueltos
+
+Van después de los cuatro de arriba, en cualquier orden. Ya están incluidos en
+`01-tablas.sql`, así que en una base nueva no hace falta correrlos; son para
+bases que ya existían antes del cambio.
+
+| Archivo | Qué hace |
+|---|---|
+| `color-evento.sql` | Agrega `eventos.color_acento` (el color de acento propio de cada evento) |
+
 ## Antes de correrlos: cambiar el mail del admin
 
 En `02-rls.sql` está la función `es_admin()` con el mail del administrador

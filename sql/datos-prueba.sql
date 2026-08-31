@@ -14,7 +14,7 @@
 -- ============================================================
 -- EVENTO 1 — Cachengue es de Bronx (sábado)
 -- ============================================================
-insert into public.eventos (nombre, fecha_texto, puertas, lugar, direccion, descripcion, arte, activo, pasado)
+insert into public.eventos (nombre, fecha_texto, puertas, lugar, direccion, descripcion, arte, color_acento, activo, pasado)
 select
   'Cachengue es de Bronx',
   'Sáb 18 Jul 2026',
@@ -22,6 +22,7 @@ select
   'Bronx Social Club',
   'Casanova 888, Bahía Blanca',
   'Edad mínima: 18 años.',
+  'naranja',
   'naranja',
   true,
   false
@@ -53,7 +54,7 @@ cross join (values
 -- ============================================================
 -- EVENTO 2 — Jueves Picante
 -- ============================================================
-insert into public.eventos (nombre, fecha_texto, puertas, lugar, direccion, descripcion, arte, activo, pasado)
+insert into public.eventos (nombre, fecha_texto, puertas, lugar, direccion, descripcion, arte, color_acento, activo, pasado)
 select
   'Jueves Picante',
   'Jue 16 Jul 2026',
@@ -61,6 +62,7 @@ select
   'Bronx Social Club',
   'Casanova 888, Bahía Blanca',
   'Edad mínima: 18 años.',
+  'rojo',
   'rojo',
   true,
   false

@@ -74,7 +74,7 @@ async function uploadFoto(file){
 
 /* --- Datos demo --- */
 const DEMO_EVENTS = [
-  {id:1, nombre:"Cachengue es de Bronx", fecha_texto:"Sáb 5 Sep 2026", lugar:"Bronx Social Club", puertas:"Cena 22hs · Previa 00hs · Cachengue 01:30", arte:"red", agotado:false, ubicacion_secreta:false, descripcion:"El sábado clásico de Bronx. Cena, previa y cachengue hasta las 6. +18 con documento.", foto_url:null, direccion:"Casanova 888, Bahía Blanca"},
+  {id:1, nombre:"Cachengue es de Bronx", fecha_texto:"Sáb 5 Sep 2026", lugar:"Bronx Social Club", puertas:"Cena 22hs · Previa 00hs · Cachengue 01:30", arte:"red", color_acento:"violeta", agotado:false, ubicacion_secreta:false, descripcion:"El sábado clásico de Bronx. Cena, previa y cachengue hasta las 6. +18 con documento.", foto_url:null, direccion:"Casanova 888, Bahía Blanca"},
 ];
 const DEMO_TIPOS = [
   {id:101, evento_id:1, nombre:"LA TERRAZA - PREVIA DE AMIGOS", descripcion:"Acceso exclusivo terrazas. Barra libre.", precio:17000, cantidad:40, orden:0, categoria:"ticket", accesos:1, activo:true, oculto:false, valido_desde:"00:30", valido_hasta:"02:30"},
@@ -211,6 +211,32 @@ function textoValidez(t){
 }
 const servicioDe = precio => Math.round((Number(precio) || 0) * SERVICIO_PCT);
 
+/* ================== COLOR DE ACENTO POR EVENTO ==================
+   eventos.color_acento guarda una CLAVE ("rojo"), no un hex: los valores de
+   cada una viven en el bloque "COLOR DE ACENTO POR EVENTO" de estilos.css.
+   Acá sólo se escribe esa clave como data-color-evento en el contenedor
+   correspondiente; el CSS redefine ahí los tokens del acento y todo lo que
+   ya pintaba con var(--accent) cambia solo.
+
+   El scope importa: se pone en #page-detalle, en el overlay de compra y en
+   cada tarjeta de la grilla. Nunca en <body> ni en el header/footer, que
+   siguen siendo el naranja de la marca. */
+const COLORES_EVENTO = ["naranja","rojo","blanco","violeta","verde"];
+const COLOR_EVENTO_DEFECTO = "naranja";
+// Tolera null, una clave vieja o una que ya no existe en la paleta
+function colorEvento(ev){
+  const c = ev && ev.color_acento;
+  return COLORES_EVENTO.includes(c) ? c : COLOR_EVENTO_DEFECTO;
+}
+// Tiñe la página de detalle (y el modal de compra, que vive fuera de ella)
+function pintarColorDetalle(ev){
+  const color = colorEvento(ev);
+  const pag = document.getElementById("page-detalle");
+  if(pag) pag.dataset.colorEvento = color;
+  const ov = document.getElementById("overlay");
+  if(ov) ov.dataset.colorEvento = color;
+}
+
 /* ================== EVENTOS (tarjetas) ================== */
 async function loadEvents(){
   const grid = document.getElementById("grid");
@@ -228,6 +254,7 @@ async function loadEvents(){
     const desde = precioDesde(ev);
     const el = document.createElement("article");
     el.className = "ticket" + (agotado ? " soldout" : "");
+    el.dataset.colorEvento = colorEvento(ev);   // el glow de la tarjeta sale de acá
     const artClass = ev.foto_url ? "photo" : ev.arte;
     const artStyle = ev.foto_url ? `style="background-image:url('${ev.foto_url}')"` : "";
     el.innerHTML = `
@@ -352,6 +379,7 @@ function openDetail(id, empujarURL=true){
   if(!ev) return;
   document.getElementById("d-name").textContent = ev.nombre;
   pintarCabeceraDetalle(ev);
+  pintarColorDetalle(ev);
 
   // Fondo blurreado + flyer con la foto del evento
   const bg = document.getElementById("d-bg");
@@ -1244,8 +1272,20 @@ function previewFoto(){
   const img = document.getElementById("ev-thumb");
   if(f){ img.src = URL.createObjectURL(f); img.style.display="block"; }
 }
+/* Selector de color del formulario: guarda la clave en el input oculto
+   ev-color y marca el círculo elegido. El color no se aplica al panel — el
+   Studio sigue en naranja; recién se ve en la página del evento. */
+function elegirColorEvento(clave){
+  const color = COLORES_EVENTO.includes(clave) ? clave : COLOR_EVENTO_DEFECTO;
+  const campo = document.getElementById("ev-color");
+  if(campo) campo.value = color;
+  document.querySelectorAll(".color-swatch").forEach(b=>{
+    b.classList.toggle("elegido", b.dataset.colorEvento === color);
+  });
+}
 function resetEventoForm(){
   ["ev-id","ev-nombre","ev-fecha","ev-puertas","ev-lugar","ev-desc","ev-direccion","ev-foto-url"].forEach(id=>document.getElementById(id).value="");
+  elegirColorEvento(COLOR_EVENTO_DEFECTO);
   document.getElementById("ev-secreta").checked=false;
   document.getElementById("ev-agotado").checked=false;
   TIPOS_FORM = []; TIPOS_BORRADOS = [];
@@ -1268,6 +1308,7 @@ function editEvento(id){
   document.getElementById("ev-desc").value = ev.descripcion||"";
   document.getElementById("ev-direccion").value = ev.direccion||"";
   document.getElementById("ev-foto-url").value = ev.foto_url||"";
+  elegirColorEvento(colorEvento(ev));
   document.getElementById("ev-secreta").checked = !!ev.ubicacion_secreta;
   document.getElementById("ev-agotado").checked = !!ev.agotado;
   // Copia editable de los tipos: hasta que no se guarda, no se toca la base
@@ -1318,6 +1359,7 @@ async function saveEvento(){
       ubicacion_secreta: secreta,
       agotado: document.getElementById("ev-agotado").checked,
       foto_url: fotoUrl,
+      color_acento: document.getElementById("ev-color").value || COLOR_EVENTO_DEFECTO,
       arte: "red"
     };
     const id = document.getElementById("ev-id").value;
@@ -2597,6 +2639,7 @@ async function openPasado(evId, empujarURL=true){
     cuando: [ev.fecha_texto, "Evento finalizado"].filter(Boolean),
     edad: null
   });
+  pintarColorDetalle(ev);
 
   const bg = document.getElementById("d-bg");
   const flyer = document.getElementById("d-flyer");

@@ -18,6 +18,10 @@ create table if not exists public.eventos (
   descripcion       text,
   foto_url          text,                      -- portada, sale del bucket "fotos"
   arte              text default 'red',        -- color de respaldo cuando no hay foto
+  -- Color de acento del evento: pinta su página de detalle y el glow de su
+  -- tarjeta en la portada. Los hex de cada clave están en css/estilos.css.
+  color_acento      text not null default 'naranja'
+                    check (color_acento in ('naranja','rojo','blanco','violeta','verde')),
   activo            boolean not null default true,
   pasado            boolean not null default false,   -- true = va a la galería de eventos pasados
   agotado           boolean not null default false,   -- agotado a mano desde el panel

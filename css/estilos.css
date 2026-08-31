@@ -18,6 +18,11 @@
   --text-dim:#8B8B93;
   --text-faint:#55555C;
   --accent:#F58C29;
+  /* El mismo naranja en canal suelto, para las cuatro luces de acento
+     (rgba(var(--acento-rgb),a)). Existe para que un evento con color propio
+     pueda re-teñirlas cambiando una sola variable — ver "COLOR DE ACENTO POR
+     EVENTO" más abajo. Si cambiás --accent, cambiá también esto. */
+  --acento-rgb:245,140,41;
   --accent-2:#F4526B;
   --gradient:linear-gradient(135deg,#F4526B,#F58C29);
 
@@ -58,6 +63,25 @@ body::before{
     radial-gradient(ellipse 60% 45% at 20% 0%, rgba(245,140,41,0.02), transparent 70%),
     radial-gradient(ellipse 50% 40% at 85% 60%, rgba(244,82,107,0.012), transparent 70%);
 }
+/* ---------- COLOR DE ACENTO POR EVENTO ----------
+   Cada evento guarda una clave de color en eventos.color_acento; el JS la
+   escribe como data-color-evento en el contenedor del detalle y en cada
+   tarjeta de la portada. Acá esa clave sólo redefine los tokens del acento:
+   todo lo que ya pinta con var(--accent) / rgba(var(--acento-rgb),a) dentro
+   de ese contenedor cambia solo, sin una regla por color.
+
+   Los cinco vienen en par (de → a): el primero es el acento sólido, el par
+   completo es el degradado con el que se muestran los círculos del selector
+   en el Studio.
+
+   La identidad del sitio NO se toca: header, footer, home y el panel quedan
+   en naranja porque nada de eso cuelga de un contenedor con data-color-evento. */
+[data-color-evento="naranja"]{--accent:#FF6B35;--acento-rgb:255,107,53;--acento-par:#F7931E}
+[data-color-evento="rojo"]   {--accent:#FF3B30;--acento-rgb:255,59,48; --acento-par:#C1121F}
+[data-color-evento="blanco"] {--accent:#FFFFFF;--acento-rgb:255,255,255;--acento-par:#E8E8E8}
+[data-color-evento="violeta"]{--accent:#A855F7;--acento-rgb:168,85,247;--acento-par:#6D28D9}
+[data-color-evento="verde"]  {--accent:#22C55E;--acento-rgb:34,197,94; --acento-par:#15803D}
+
 ::selection{background:var(--accent);color:#0A0A0A}
 a:focus-visible,button:focus-visible,input:focus-visible,
 textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -101,7 +125,7 @@ section.angosta{max-width:480px}
   transition:opacity var(--transicion),background var(--transicion),
              border-color var(--transicion),box-shadow var(--transicion);
 }
-.btn:hover{opacity:.9;box-shadow:0 4px 16px rgba(245,140,41,0.20)}
+.btn:hover{opacity:.9;box-shadow:0 4px 16px rgba(var(--acento-rgb),0.20)}
 /* Deshabilitado se apaga a superficie: el naranja bajado de opacidad sobre
    negro da un marrón sucio que no se lee como "inactivo". */
 .btn:disabled{background:var(--surface-2);border-color:var(--border);color:var(--text-faint);cursor:default}
@@ -142,7 +166,7 @@ input,textarea,select{
 }
 input:focus,textarea:focus,select:focus{
   outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(245,140,41,0.12);
+  box-shadow:0 0 0 3px rgba(var(--acento-rgb),0.12);
 }
 input::placeholder,textarea::placeholder{color:var(--text-faint)}
 textarea{min-height:96px;resize:vertical}
@@ -155,6 +179,19 @@ label{display:block;margin-bottom:8px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .form-grid .full{grid-column:1/-1}
 .thumb{width:100%;max-height:180px;object-fit:cover;border-radius:var(--radio-campo);border:1px solid var(--border);margin-top:12px;display:none}
+
+/* Selector de color del evento (Studio): cinco círculos, cada uno pintado con
+   el degradado de su propia clave. El anillo del elegido también sale del
+   color, así que no hace falta una regla por color. */
+.color-picker{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.color-swatch{
+  width:36px;height:36px;padding:0;border-radius:999px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(135deg,var(--accent),var(--acento-par));
+  transition:box-shadow var(--transicion),transform var(--transicion);
+}
+.color-swatch:hover{transform:scale(1.06)}
+.color-swatch.elegido{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
 .err{color:var(--bad);font-size:0.875rem;margin-bottom:12px;display:none}
 .ok{color:var(--ok);font-size:0.875rem;margin-bottom:12px;display:none}
 
@@ -273,9 +310,18 @@ body > nav{
 .ticket{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
   overflow:hidden;display:flex;flex-direction:column;
-  transition:background var(--transicion),border-color var(--transicion);
+  transition:background var(--transicion),border-color var(--transicion),box-shadow var(--transicion);
 }
-.ticket:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+.ticket:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25)}
+/* Cada tarjeta lleva el color de SU evento (data-color-evento la escribe
+   loadEvents). En reposo la luz es apenas perceptible — es lo que hace que
+   la grilla se lea con colores distintos también en el celular, donde no hay
+   hover; al pasar el mouse sube al mismo nivel que el resto de las luces de
+   acento del sistema. */
+.ticket[data-color-evento]{box-shadow:0 4px 20px rgba(var(--acento-rgb),0.07)}
+.ticket[data-color-evento]:hover{box-shadow:0 6px 26px rgba(var(--acento-rgb),0.20)}
+.ticket.soldout[data-color-evento],
+.ticket.pasado[data-color-evento]{box-shadow:none}
 .art{
   position:relative;height:180px;cursor:pointer;
   display:flex;align-items:flex-end;padding:20px;
@@ -389,9 +435,9 @@ body > nav{
   padding:20px;transition:background var(--transicion),border-color var(--transicion);
 }
 .tipo-card + .tipo-card{margin-top:12px}
-.tipo-card:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+.tipo-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25)}
 /* Con cantidad elegida: la marca queda encendida aunque saques el mouse */
-.tipo-card.elegida{border-color:var(--accent);background:rgba(245,140,41,0.04)}
+.tipo-card.elegida{border-color:var(--accent);background:rgba(var(--acento-rgb),0.04)}
 .tipo-card.agotado{opacity:.45}
 .tipo-card.agotado:hover{background:var(--surface);border-color:var(--border)}
 .tipo-card.agotado .tipo-nombre{text-decoration:line-through}
@@ -419,7 +465,10 @@ body > nav{
 }
 .tipo-qty button.menos{background:var(--surface-2);color:var(--text)}
 .tipo-qty button.menos:hover{background:#22222A}
-.tipo-qty button.mas{background:var(--text);border-color:var(--text);color:var(--bg)}
+/* El "+" toma el acento (naranja de la marca, o el color propio del evento
+   cuando el detalle declara uno). Usa la variable, no un hex, para que el
+   scope de [data-color-evento] lo alcance sin reescribir la regla. */
+.tipo-qty button.mas{background:var(--accent);border-color:var(--accent);color:#0A0A0A}
 .tipo-qty button.mas:hover{opacity:.9}
 .tipo-qty span{font-size:1rem;font-weight:600;min-width:16px;text-align:center}
 

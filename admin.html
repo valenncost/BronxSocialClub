@@ -133,6 +133,19 @@
               <div><label>Lugar (nombre corto)</label><input id="ev-lugar" placeholder="Bronx Social Club"></div>
 
               <div class="full">
+                <label>Color del evento</label>
+                <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Pinta la página de este evento (botones, entradas elegidas, luces) y el brillo de su tarjeta en la portada. El resto del sitio sigue en naranja.</p>
+                <input type="hidden" id="ev-color" value="naranja">
+                <div class="color-picker">
+                  <button class="color-swatch" data-color-evento="naranja" onclick="elegirColorEvento('naranja')" title="Naranja" aria-label="Naranja"></button>
+                  <button class="color-swatch" data-color-evento="rojo"    onclick="elegirColorEvento('rojo')"    title="Rojo"    aria-label="Rojo"></button>
+                  <button class="color-swatch" data-color-evento="blanco"  onclick="elegirColorEvento('blanco')"  title="Blanco"  aria-label="Blanco"></button>
+                  <button class="color-swatch" data-color-evento="violeta" onclick="elegirColorEvento('violeta')" title="Violeta" aria-label="Violeta"></button>
+                  <button class="color-swatch" data-color-evento="verde"   onclick="elegirColorEvento('verde')"   title="Verde"   aria-label="Verde"></button>
+                </div>
+              </div>
+
+              <div class="full">
                 <label style="margin-bottom:8px">Tipos de entrada</label>
                 <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Todos se venden <b>al mismo tiempo</b> en la página del evento, en el orden que les des acá. Los que marques como <b>Combos</b> van en su propia sección, abajo de los tickets. Dejá el cupo vacío si ese tipo no tiene límite; cuando se llena, se muestra agotado solo.</p>
                 <div id="tipos-list"></div>
