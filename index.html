@@ -56,11 +56,16 @@
     <div class="grid" id="grid"><div class="loading">Cargando eventos...</div></div>
   </section>
 
+  <!-- "Eventos pasados" sacado de la portada (pendiente reemplazo por una
+       sección de artistas que pasaron por Bronx, ver CLAUDE.md). El markup
+       y su JS (loadPasados/openPasado en js/app.js) quedan comentados, no
+       borrados, para retomarlos.
   <section id="pasados-sec" style="display:none">
     <h2>Eventos pasados</h2>
     <p class="sub">Eventos ya finalizados.</p>
     <div class="grid" id="grid-pasados"></div>
   </section>
+  -->
 </div>
 
 <!-- ============ PÁGINA: DETALLE EVENTO ============ -->
@@ -88,9 +93,15 @@
           <button class="btn" id="d-buy-btn" disabled>Elegí tus entradas</button>
         </div>
 
+        <!-- Galería del detalle: sólo la usaba el evento pasado (openPasado
+             en js/app.js), que también está comentado. openDetail() (para
+             eventos vigentes) hace un getElementById con guarda de null acá,
+             así que no hace falta dejar el nodo. Ver nota arriba.
         <div id="d-galeria-sec" style="display:none">
           <div class="gal-publica" id="d-galeria" style="margin-bottom:36px"></div>
         </div>
+        -->
+
 
         <div class="d-bloque" id="d-desc-bloque">
           <h3 class="d-section-title">Descripción</h3>

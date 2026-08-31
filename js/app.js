@@ -101,7 +101,7 @@ function go(p){
   // Si la sección existe en ESTE documento (ej: detalle dentro de index), mostrarla sin navegar
   const enDoc = document.getElementById("page-"+p);
   if(enDoc){
-    if(p==="eventos" && /[?&](evento|pasado)=/.test(location.search)){
+    if(p==="eventos" && /[?&]evento=/.test(location.search)){
       try{ history.pushState(null, "", location.pathname); }catch(e){}
     }
     document.querySelectorAll(".page").forEach(x=>x.classList.remove("show"));
@@ -251,28 +251,20 @@ async function loadEvents(){
   grid.innerHTML = "";
   EVENTS.forEach(ev=>{
     const agotado = eventoAgotado(ev);
-    const desde = precioDesde(ev);
     const el = document.createElement("article");
     el.className = "ticket" + (agotado ? " soldout" : "");
     el.dataset.colorEvento = colorEvento(ev);   // el glow de la tarjeta sale de acá
-    const artClass = ev.foto_url ? "photo" : ev.arte;
+    el.onclick = () => openDetail(ev.id);       // toda la tarjeta es el link, sin botones
+    const artClass = ev.foto_url ? "" : ev.arte;
     const artStyle = ev.foto_url ? `style="background-image:url('${ev.foto_url}')"` : "";
+    const horario = [ev.fecha_texto, ev.puertas].filter(Boolean).join(" · ");
     el.innerHTML = `
-      <div class="art ${artClass}" ${artStyle} onclick="openDetail(${ev.id})">
-        <span class="art-name">${esc(ev.nombre)}</span>
+      <div class="art ${artClass}" ${artStyle}>
+        ${agotado ? '<span class="tag-soldout">Agotado</span>' : ""}
       </div>
-      <div class="body"><div class="meta">
-        <span><b>${esc(ev.fecha_texto)}</b></span>
-        <span><b>${esc(ev.lugar)}</b></span>
-        <span><b>${esc(ev.puertas)}</b></span>
-      </div></div>
-      <div class="stub">
-        <div class="price">${desde != null ? `<small>Desde</small>${fmt(desde)}` : `<small>Entradas</small>Próximamente`}</div>
-        ${agotado ? '<span class="tag-soldout">Agotado</span>'
-          : `<div class="actions">
-               <button class="btn ghost" onclick="openDetail(${ev.id})">Ver más</button>
-               ${sinVenta(ev) ? "" : `<button class="btn buy" onclick="openDetail(${ev.id})">Comprar</button>`}
-             </div>`}
+      <div class="ticket-info">
+        <h3 class="ticket-nombre">${esc(ev.nombre)}</h3>
+        <p class="ticket-meta">${esc(horario)}</p>
       </div>`;
     grid.appendChild(el);
   });
@@ -872,9 +864,12 @@ async function determinarRol(email, token){
   return null;
 }
 // Muestra u oculta secciones del panel según el rol
-/* Secciones del panel: cada una es una pestaña del sidebar.
-   "Eventos pasados" vive adentro de Eventos y el escáner es una página
-   aparte, así que ninguno de los dos tiene entrada propia acá. */
+/* Secciones del panel: cada una es una pestaña del sidebar. El escáner es
+   una página aparte, así que no tiene entrada propia acá. "Eventos pasados"
+   vivía adentro de Eventos pero se sacó del Studio (pendiente reemplazo por
+   una sección de artistas que pasaron por Bronx, ver CLAUDE.md) — su
+   sección de HTML (id="sec-pasados") y todo su JS quedaron comentados más
+   abajo, no borrados. */
 const SECCIONES_ADMIN = [
   { clave:"resumen",     titulo:"Resumen" },
   { clave:"eventos",     titulo:"Eventos" },
@@ -889,7 +884,7 @@ function aplicarRol(){
   // Ojo: además de la sección hay que esconder su botón del sidebar, si no
   // el staff ve pestañas que lo llevan a un panel vacío.
   const soloAdmin = [
-    "sec-eventos","sec-pasados","sec-usuarios","sec-equipo","btn-borrar-pend",
+    "sec-eventos","sec-usuarios","sec-equipo","btn-borrar-pend",
     "nav-eventos","nav-usuarios","nav-equipo","btn-crear-evento"
   ];
   soloAdmin.forEach(id=>{
@@ -951,7 +946,7 @@ async function abrirPanel(){
   if(ROL==="admin"){
     await cargarTipos(true);   // el panel también edita los tipos pausados
     renderTiposForm();
-    renderEventAdmin(); loadUsuarios(); loadPasadosAdmin(); loadStaff();
+    renderEventAdmin(); loadUsuarios(); loadStaff();
   }
 }
 
@@ -2499,197 +2494,199 @@ async function guardarTelefono(){
 }
 
 
-/* ================== EVENTOS PASADOS ================== */
-// La carga de galería desde el admin se sacó: los eventos pasados se cargan
-// solo con nombre, fecha, lugar y foto de portada. El lado público sigue
-// mostrando la galería de los eventos que ya tienen items cargados.
-
-
-/* ================== ADMIN: EVENTOS PASADOS (gestor propio) ================== */
-let PASADOS_ADMIN = [];
-async function loadPasadosAdmin(){
-  if(DEMO){ PASADOS_ADMIN=[]; renderPasadosAdmin(); return; }
-  try{ PASADOS_ADMIN = await dbGet("eventos", "pasado=eq.true&order=id.desc"); }catch(e){ PASADOS_ADMIN=[]; }
-  renderPasadosAdmin();
-}
-function renderPasadosAdmin(){
-  const list = document.getElementById("pe-list");
-  if(!list) return;
-  list.innerHTML = PASADOS_ADMIN.map(ev=>`
-    <div class="ev-admin-item">
-      <div class="info">
-        <b>${esc(ev.nombre)}</b>
-        <span>${esc(ev.fecha_texto||"")} ${ev.lugar?"· "+esc(ev.lugar):""}</span>
-      </div>
-      <div class="row-actions">
-        <button class="btn ghost" onclick="editPasado(${ev.id})">Editar / Galería</button>
-        <button class="btn ghost" onclick="deletePasado(${ev.id})">Borrar</button>
-      </div>
-    </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no cargaste eventos pasados.</p>`;
-}
-function previewFotoPasado(){
-  const f = document.getElementById("pe-foto").files[0];
-  const img = document.getElementById("pe-thumb");
-  if(f){ img.src = URL.createObjectURL(f); img.style.display="block"; }
-}
-function resetPasadoForm(){
-  ["pe-id","pe-nombre","pe-fecha","pe-lugar","pe-desc","pe-direccion","pe-foto-url"].forEach(id=>document.getElementById(id).value="");
-  document.getElementById("pe-foto").value="";
-  document.getElementById("pe-thumb").style.display="none";
-  document.getElementById("pe-form-title").textContent="Nuevo evento pasado";
-  document.getElementById("pe-save-btn").textContent="Guardar evento pasado";
-  document.getElementById("pe-err").style.display="none";
-  document.getElementById("pe-ok").style.display="none";
-}
-function editPasado(id){
-  const ev = PASADOS_ADMIN.find(e=>e.id===id); if(!ev) return;
-  document.getElementById("pe-id").value = ev.id;
-  document.getElementById("pe-nombre").value = ev.nombre||"";
-  document.getElementById("pe-fecha").value = ev.fecha_texto||"";
-  document.getElementById("pe-lugar").value = ev.lugar||"";
-  document.getElementById("pe-desc").value = ev.descripcion||"";
-  document.getElementById("pe-direccion").value = ev.direccion||"";
-  document.getElementById("pe-foto-url").value = ev.foto_url||"";
-  const img = document.getElementById("pe-thumb");
-  if(ev.foto_url){ img.src=ev.foto_url; img.style.display="block"; } else img.style.display="none";
-  document.getElementById("pe-form-title").textContent = "Editar: " + ev.nombre;
-  document.getElementById("pe-save-btn").textContent = "Guardar cambios";
-  document.getElementById("pe-form-title").scrollIntoView({behavior:"smooth"});
-}
-async function savePasado(){
-  const err = document.getElementById("pe-err"), ok = document.getElementById("pe-ok");
-  err.style.display="none"; ok.style.display="none";
-  const nombre = document.getElementById("pe-nombre").value.trim();
-  if(!nombre){ err.textContent="Poné al menos el nombre del evento."; err.style.display="block"; return; }
-
-  const btn = document.getElementById("pe-save-btn");
-  btn.disabled=true; const prev=btn.textContent; btn.textContent="Guardando...";
-  try{
-    let fotoUrl = document.getElementById("pe-foto-url").value || null;
-    const file = document.getElementById("pe-foto").files[0];
-    if(file){ fotoUrl = DEMO ? URL.createObjectURL(file) : await uploadFoto(file); }
-    const data = {
-      nombre,
-      fecha_texto: document.getElementById("pe-fecha").value.trim(),
-      lugar: document.getElementById("pe-lugar").value.trim(),
-      descripcion: document.getElementById("pe-desc").value.trim(),
-      direccion: document.getElementById("pe-direccion").value.trim(),
-      foto_url: fotoUrl,
-      pasado: true, activo: true, agotado: false,
-      puertas: "", arte: "red"
-    };
-    const id = document.getElementById("pe-id").value;
-    if(!DEMO){
-      if(id){ await dbUpdate("eventos", id, data); }
-      else {
-        const creado = await dbInsert("eventos", data);
-        if(creado && creado[0]){ document.getElementById("pe-id").value = creado[0].id; }
-      }
-    }
-    ok.textContent = id ? "Evento pasado actualizado." : "Evento pasado creado."; ok.style.display="block";
-    document.getElementById("pe-form-title").textContent = "Editar: " + nombre;
-    document.getElementById("pe-save-btn").textContent = "Guardar cambios";
-    loadPasadosAdmin(); loadPasados();
-  }catch(e){ err.textContent="Error al guardar: "+e.message; err.style.display="block"; }
-  btn.disabled=false; if(btn.textContent==="Guardando...") btn.textContent=prev;
-}
-async function deletePasado(id){
-  const ev = PASADOS_ADMIN.find(e=>e.id===id);
-  if(!confirm(`¿Borrar "${ev.nombre}" y toda su galería?`)) return;
-  try{
-    await dbDelete("eventos", id);
-    loadPasadosAdmin(); loadPasados();
-  }catch(e){ alert("No se pudo borrar: "+e.message); }
-}
-
-/* ------- Lado público: sección Eventos pasados ------- */
-let PASADOS = [];
-async function loadPasados(){
-  const sec = document.getElementById("pasados-sec");
-  if(!sec) return;
-  try{
-    PASADOS = DEMO ? [] : await dbGet("eventos", "pasado=eq.true&activo=eq.true&order=id.desc");
-  }catch(e){ PASADOS = []; }
-  if(!PASADOS.length){ sec.style.display="none"; return; }
-  sec.style.display="block";
-  document.getElementById("grid-pasados").innerHTML = PASADOS.map(ev=>`
-    <article class="ticket pasado">
-      <div class="art ${ev.foto_url?'':'red'}" style="${ev.foto_url?`background-image:url('${ev.foto_url}')`:''}" onclick="openPasado(${ev.id})">
-        <span>${esc(ev.nombre)}</span>
-      </div>
-      <div class="body" style="padding:14px 16px">
-        <span style="color:var(--text-dim);font-size:13px">${esc(ev.fecha_texto||"")}</span>
-        <button class="btn ghost ancho" style="margin-top:10px" onclick="openPasado(${ev.id})">Ver evento</button>
-      </div>
-    </article>`).join("");
-}
-function urlVideoEmbed(url){
-  // YouTube → iframe embebido; otros links → link normal
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-  if(yt) return `https://www.youtube.com/embed/${yt[1]}`;
-  return null;
-}
-async function openPasado(evId, empujarURL=true){
-  const ev = PASADOS.find(e=>e.id===evId); if(!ev) return;
-  if(empujarURL){ try{ history.pushState(null, "", "?pasado="+evId); }catch(e){} }
-
-  document.getElementById("d-name").textContent = ev.nombre;
-  // Un evento pasado no vende: sin edad mínima, y el "cuándo" lleva el aviso
-  pintarCabeceraDetalle(ev, {
-    cuando: [ev.fecha_texto, "Evento finalizado"].filter(Boolean),
-    edad: null
-  });
-  pintarColorDetalle(ev);
-
-  const bg = document.getElementById("d-bg");
-  const flyer = document.getElementById("d-flyer");
-  if(ev.foto_url){
-    bg.style.backgroundImage = `url('${ev.foto_url}')`;
-    flyer.classList.remove("nofoto");
-    flyer.style.backgroundImage = `url('${ev.foto_url}')`;
-  } else {
-    bg.style.backgroundImage = "";
-    flyer.classList.add("nofoto");
-    flyer.style.backgroundImage = "";
-  }
-
-  pintarDescripcion(ev.descripcion || "");
-
-  // Evento pasado: sin tarjeta de compra
-  const buyCard = document.querySelector(".d-buy-card");
-  if(buyCard) buyCard.style.display = "none";
-
-  // Ubicación
-  const loc = document.getElementById("d-location");
-  if(ev.direccion){
-    const q = encodeURIComponent(ev.direccion);
-    loc.innerHTML = `<p style="color:var(--text-dim);margin-bottom:12px;font-size:13px">${esc(ev.direccion)}</p>
-      <div class="map-wrap"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>`;
-  } else {
-    loc.innerHTML = `<p style="color:var(--text-dim)">${esc(ev.lugar||"")}</p>`;
-  }
-
-  // Galería del evento
-  const sec = document.getElementById("d-galeria-sec");
-  const cont = document.getElementById("d-galeria");
-  sec.style.display = "block";
-  cont.innerHTML = `<div class="loading">Cargando galería...</div>`;
-  let items = [];
-  try{ items = await dbGet("galeria", `evento_id=eq.${evId}&order=orden.asc`); }catch(e){}
-  // Sin fotos ni videos: ocultamos la sección en vez de mostrarla vacía
-  if(!items.length){ sec.style.display="none"; cont.innerHTML=""; }
-  else cont.innerHTML = items.map(g=>{
-    if(g.tipo==="foto") return `<img src="${g.url}" alt="${esc(ev.nombre)}" loading="lazy">`;
-    const emb = urlVideoEmbed(g.url);
-    if(emb) return `<div class="gal-video"><iframe src="${emb}" allowfullscreen loading="lazy"></iframe></div>`;
-    if(g.url.includes("/storage/") || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(g.url))
-      return `<div class="gal-video"><video src="${g.url}" controls playsinline preload="metadata"></video></div>`;
-    return `<a class="btn ghost" href="${g.url}" target="_blank" rel="noopener" style="align-self:center">Ver video</a>`;
-  }).join("");
-
-  go('detalle');
-  medirDesc();
-}
+// ================== EVENTOS PASADOS + GALERÍA (DESACTIVADO) ==================
+// Sacado de la portada y del Studio: pendiente reemplazo por una sección de
+// artistas que pasaron por Bronx (ver CLAUDE.md, "Current status"). Todo el
+// bloque queda comentado, no borrado, para retomarlo cuando se defina esa
+// sección nueva. Mientras tanto: nada llama a nada de acá (ver initPage,
+// abrirPanel y aplicarRol, donde se sacaron los call sites), y el HTML que
+// usaba (pasados-sec, grid-pasados, sec-pasados, pe-*, d-galeria-sec,
+// d-galeria) está comentado en index.html / admin.html.
+//
+// let PASADOS_ADMIN = [];
+// async function loadPasadosAdmin(){
+//   if(DEMO){ PASADOS_ADMIN=[]; renderPasadosAdmin(); return; }
+//   try{ PASADOS_ADMIN = await dbGet("eventos", "pasado=eq.true&order=id.desc"); }catch(e){ PASADOS_ADMIN=[]; }
+//   renderPasadosAdmin();
+// }
+// function renderPasadosAdmin(){
+//   const list = document.getElementById("pe-list");
+//   if(!list) return;
+//   list.innerHTML = PASADOS_ADMIN.map(ev=>`
+//     <div class="ev-admin-item">
+//       <div class="info">
+//         <b>${esc(ev.nombre)}</b>
+//         <span>${esc(ev.fecha_texto||"")} ${ev.lugar?"· "+esc(ev.lugar):""}</span>
+//       </div>
+//       <div class="row-actions">
+//         <button class="btn ghost" onclick="editPasado(${ev.id})">Editar / Galería</button>
+//         <button class="btn ghost" onclick="deletePasado(${ev.id})">Borrar</button>
+//       </div>
+//     </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no cargaste eventos pasados.</p>`;
+// }
+// function previewFotoPasado(){
+//   const f = document.getElementById("pe-foto").files[0];
+//   const img = document.getElementById("pe-thumb");
+//   if(f){ img.src = URL.createObjectURL(f); img.style.display="block"; }
+// }
+// function resetPasadoForm(){
+//   ["pe-id","pe-nombre","pe-fecha","pe-lugar","pe-desc","pe-direccion","pe-foto-url"].forEach(id=>document.getElementById(id).value="");
+//   document.getElementById("pe-foto").value="";
+//   document.getElementById("pe-thumb").style.display="none";
+//   document.getElementById("pe-form-title").textContent="Nuevo evento pasado";
+//   document.getElementById("pe-save-btn").textContent="Guardar evento pasado";
+//   document.getElementById("pe-err").style.display="none";
+//   document.getElementById("pe-ok").style.display="none";
+// }
+// function editPasado(id){
+//   const ev = PASADOS_ADMIN.find(e=>e.id===id); if(!ev) return;
+//   document.getElementById("pe-id").value = ev.id;
+//   document.getElementById("pe-nombre").value = ev.nombre||"";
+//   document.getElementById("pe-fecha").value = ev.fecha_texto||"";
+//   document.getElementById("pe-lugar").value = ev.lugar||"";
+//   document.getElementById("pe-desc").value = ev.descripcion||"";
+//   document.getElementById("pe-direccion").value = ev.direccion||"";
+//   document.getElementById("pe-foto-url").value = ev.foto_url||"";
+//   const img = document.getElementById("pe-thumb");
+//   if(ev.foto_url){ img.src=ev.foto_url; img.style.display="block"; } else img.style.display="none";
+//   document.getElementById("pe-form-title").textContent = "Editar: " + ev.nombre;
+//   document.getElementById("pe-save-btn").textContent = "Guardar cambios";
+//   document.getElementById("pe-form-title").scrollIntoView({behavior:"smooth"});
+// }
+// async function savePasado(){
+//   const err = document.getElementById("pe-err"), ok = document.getElementById("pe-ok");
+//   err.style.display="none"; ok.style.display="none";
+//   const nombre = document.getElementById("pe-nombre").value.trim();
+//   if(!nombre){ err.textContent="Poné al menos el nombre del evento."; err.style.display="block"; return; }
+//
+//   const btn = document.getElementById("pe-save-btn");
+//   btn.disabled=true; const prev=btn.textContent; btn.textContent="Guardando...";
+//   try{
+//     let fotoUrl = document.getElementById("pe-foto-url").value || null;
+//     const file = document.getElementById("pe-foto").files[0];
+//     if(file){ fotoUrl = DEMO ? URL.createObjectURL(file) : await uploadFoto(file); }
+//     const data = {
+//       nombre,
+//       fecha_texto: document.getElementById("pe-fecha").value.trim(),
+//       lugar: document.getElementById("pe-lugar").value.trim(),
+//       descripcion: document.getElementById("pe-desc").value.trim(),
+//       direccion: document.getElementById("pe-direccion").value.trim(),
+//       foto_url: fotoUrl,
+//       pasado: true, activo: true, agotado: false,
+//       puertas: "", arte: "red"
+//     };
+//     const id = document.getElementById("pe-id").value;
+//     if(!DEMO){
+//       if(id){ await dbUpdate("eventos", id, data); }
+//       else {
+//         const creado = await dbInsert("eventos", data);
+//         if(creado && creado[0]){ document.getElementById("pe-id").value = creado[0].id; }
+//       }
+//     }
+//     ok.textContent = id ? "Evento pasado actualizado." : "Evento pasado creado."; ok.style.display="block";
+//     document.getElementById("pe-form-title").textContent = "Editar: " + nombre;
+//     document.getElementById("pe-save-btn").textContent = "Guardar cambios";
+//     loadPasadosAdmin(); loadPasados();
+//   }catch(e){ err.textContent="Error al guardar: "+e.message; err.style.display="block"; }
+//   btn.disabled=false; if(btn.textContent==="Guardando...") btn.textContent=prev;
+// }
+// async function deletePasado(id){
+//   const ev = PASADOS_ADMIN.find(e=>e.id===id);
+//   if(!confirm(`¿Borrar "${ev.nombre}" y toda su galería?`)) return;
+//   try{
+//     await dbDelete("eventos", id);
+//     loadPasadosAdmin(); loadPasados();
+//   }catch(e){ alert("No se pudo borrar: "+e.message); }
+// }
+//
+// // ------- Lado público: sección Eventos pasados -------
+// let PASADOS = [];
+// async function loadPasados(){
+//   const sec = document.getElementById("pasados-sec");
+//   if(!sec) return;
+//   try{
+//     PASADOS = DEMO ? [] : await dbGet("eventos", "pasado=eq.true&activo=eq.true&order=id.desc");
+//   }catch(e){ PASADOS = []; }
+//   if(!PASADOS.length){ sec.style.display="none"; return; }
+//   sec.style.display="block";
+//   document.getElementById("grid-pasados").innerHTML = PASADOS.map(ev=>`
+//     <article class="ticket pasado">
+//       <div class="art ${ev.foto_url?'':'red'}" style="${ev.foto_url?`background-image:url('${ev.foto_url}')`:''}" onclick="openPasado(${ev.id})">
+//         <span>${esc(ev.nombre)}</span>
+//       </div>
+//       <div class="body" style="padding:14px 16px">
+//         <span style="color:var(--text-dim);font-size:13px">${esc(ev.fecha_texto||"")}</span>
+//         <button class="btn ghost ancho" style="margin-top:10px" onclick="openPasado(${ev.id})">Ver evento</button>
+//       </div>
+//     </article>`).join("");
+// }
+// function urlVideoEmbed(url){
+//   // YouTube → iframe embebido; otros links → link normal
+//   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+//   if(yt) return `https://www.youtube.com/embed/${yt[1]}`;
+//   return null;
+// }
+// async function openPasado(evId, empujarURL=true){
+//   const ev = PASADOS.find(e=>e.id===evId); if(!ev) return;
+//   if(empujarURL){ try{ history.pushState(null, "", "?pasado="+evId); }catch(e){} }
+//
+//   document.getElementById("d-name").textContent = ev.nombre;
+//   // Un evento pasado no vende: sin edad mínima, y el "cuándo" lleva el aviso
+//   pintarCabeceraDetalle(ev, {
+//     cuando: [ev.fecha_texto, "Evento finalizado"].filter(Boolean),
+//     edad: null
+//   });
+//   pintarColorDetalle(ev);
+//
+//   const bg = document.getElementById("d-bg");
+//   const flyer = document.getElementById("d-flyer");
+//   if(ev.foto_url){
+//     bg.style.backgroundImage = `url('${ev.foto_url}')`;
+//     flyer.classList.remove("nofoto");
+//     flyer.style.backgroundImage = `url('${ev.foto_url}')`;
+//   } else {
+//     bg.style.backgroundImage = "";
+//     flyer.classList.add("nofoto");
+//     flyer.style.backgroundImage = "";
+//   }
+//
+//   pintarDescripcion(ev.descripcion || "");
+//
+//   // Evento pasado: sin tarjeta de compra
+//   const buyCard = document.querySelector(".d-buy-card");
+//   if(buyCard) buyCard.style.display = "none";
+//
+//   // Ubicación
+//   const loc = document.getElementById("d-location");
+//   if(ev.direccion){
+//     const q = encodeURIComponent(ev.direccion);
+//     loc.innerHTML = `<p style="color:var(--text-dim);margin-bottom:12px;font-size:13px">${esc(ev.direccion)}</p>
+//       <div class="map-wrap"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>`;
+//   } else {
+//     loc.innerHTML = `<p style="color:var(--text-dim)">${esc(ev.lugar||"")}</p>`;
+//   }
+//
+//   // Galería del evento
+//   const sec = document.getElementById("d-galeria-sec");
+//   const cont = document.getElementById("d-galeria");
+//   sec.style.display = "block";
+//   cont.innerHTML = `<div class="loading">Cargando galería...</div>`;
+//   let items = [];
+//   try{ items = await dbGet("galeria", `evento_id=eq.${evId}&order=orden.asc`); }catch(e){}
+//   // Sin fotos ni videos: ocultamos la sección en vez de mostrarla vacía
+//   if(!items.length){ sec.style.display="none"; cont.innerHTML=""; }
+//   else cont.innerHTML = items.map(g=>{
+//     if(g.tipo==="foto") return `<img src="${g.url}" alt="${esc(ev.nombre)}" loading="lazy">`;
+//     const emb = urlVideoEmbed(g.url);
+//     if(emb) return `<div class="gal-video"><iframe src="${emb}" allowfullscreen loading="lazy"></iframe></div>`;
+//     if(g.url.includes("/storage/") || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(g.url))
+//       return `<div class="gal-video"><video src="${g.url}" controls playsinline preload="metadata"></video></div>`;
+//     return `<a class="btn ghost" href="${g.url}" target="_blank" rel="noopener" style="align-self:center">Ver video</a>`;
+//   }).join("");
+//
+//   go('detalle');
+//   medirDesc();
+// }
 
 /* ================== INICIALIZADOR POR PÁGINA ================== */
 // Cada archivo HTML tiene <body data-page="..."> y acá arrancamos lo que corresponde.
@@ -2729,19 +2726,17 @@ async function initPage(){
     await cargarTipos();
     await cargarVentasTipo();
     await loadEvents();
-    await loadPasados();
     checkReturnFromPayment();
 
     // Si la URL apunta a un evento, abrirlo directo (deep link / recarga)
+    // ("pasado" se sacó junto con "Eventos pasados" — ver más abajo)
     const prm = new URLSearchParams(location.search);
     if(prm.get("evento")) openDetail(Number(prm.get("evento")), false);
-    else if(prm.get("pasado")) openPasado(Number(prm.get("pasado")), false);
 
     // Botón atrás/adelante del navegador
     window.addEventListener("popstate", ()=>{
       const q = new URLSearchParams(location.search);
       if(q.get("evento")) openDetail(Number(q.get("evento")), false);
-      else if(q.get("pasado")) openPasado(Number(q.get("pasado")), false);
       else go("eventos");
     });
   }

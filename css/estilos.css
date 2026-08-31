@@ -355,52 +355,42 @@ body > nav{
   .hero-slide{transition:none}
 }
 
-/* ---------- TARJETAS DE EVENTO ---------- */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:24px}
+/* ---------- TARJETAS DE EVENTO ----------
+   Estilo FlashPass: la portada es la protagonista (4:5, todo el ancho de la
+   tarjeta) y el título/fecha van sueltos debajo, sobre el fondo del sitio —
+   no hay caja ni borde propios de la tarjeta. Sin precio, sin botones: toda
+   la tarjeta es un link al detalle (onclick en el <article>, ver loadEvents
+   en app.js). El único "borde" es el glow de color del evento. */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px 24px}
 .ticket{
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
-  overflow:hidden;display:flex;flex-direction:column;
-  transition:background var(--transicion),border-color var(--transicion),box-shadow var(--transicion);
+  display:block;cursor:pointer;border-radius:var(--radio-card);
+  transition:box-shadow var(--transicion),transform var(--transicion);
 }
-.ticket:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25)}
-/* Cada tarjeta lleva el color de SU evento (data-color-evento la escribe
-   loadEvents). En reposo la luz es apenas perceptible — es lo que hace que
-   la grilla se lea con colores distintos también en el celular, donde no hay
-   hover; al pasar el mouse sube al mismo nivel que el resto de las luces de
-   acento del sistema. */
-.ticket[data-color-evento]{box-shadow:0 4px 20px rgba(var(--acento-rgb),0.07)}
-.ticket[data-color-evento]:hover{box-shadow:0 6px 26px rgba(var(--acento-rgb),0.20)}
+.ticket:hover{transform:translateY(-4px)}
+/* El glow sale del color propio del evento (data-color-evento la escribe
+   loadEvents) — es la única señal de "tarjeta" que tiene, ya que no hay
+   fondo ni borde. Sutil en reposo, más presente al pasar el mouse. */
+.ticket[data-color-evento]{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.18)}
+.ticket[data-color-evento]:hover{box-shadow:0 8px 40px rgba(var(--acento-rgb),0.30)}
 .ticket.soldout[data-color-evento],
 .ticket.pasado[data-color-evento]{box-shadow:none}
 .art{
-  position:relative;height:180px;cursor:pointer;
-  display:flex;align-items:flex-end;padding:20px;
-  font-size:1.25rem;font-weight:600;letter-spacing:-0.02em;line-height:1.2;
-  background-size:cover;background-position:center;overflow:hidden;
+  position:relative;aspect-ratio:4/5;width:100%;
+  border-radius:var(--radio-card);overflow:hidden;
+  background-size:cover;background-position:center;
 }
-.art::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.8) 100%)}
-.art span{position:relative;z-index:2}
 /* Sin foto: superficie plana, sin degradado de marca */
-.art.red{background:var(--surface-2);color:var(--text)}
-.art.red::before{display:none}
-.art.white{background:var(--text);color:var(--bg)}
-.art.white::before{display:none}
-.art.photo{color:#fff}
-.art .art-name{position:relative;z-index:2}
-.ticket .body{padding:20px;flex:1}
-.meta{font-size:0.8125rem;color:var(--text-dim);display:flex;flex-direction:column;gap:4px}
-.meta b{color:var(--text);font-weight:500}
-.stub{
-  border-top:1px solid var(--border);padding:16px 20px;
-  display:flex;justify-content:space-between;align-items:center;gap:12px;
+.art.red{background:var(--surface-2)}
+.art.white{background:var(--text)}
+.tag-soldout{
+  position:absolute;top:12px;right:12px;z-index:2;
+  background:rgba(8,8,10,.72);border:1px solid var(--border);border-radius:999px;
+  padding:4px 12px;font-size:0.75rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text);
 }
-.price{font-size:0.9375rem;font-weight:600}
-.price small{display:block;font-size:0.6875rem;font-weight:500;color:var(--text-dim);letter-spacing:0.08em;text-transform:uppercase}
-.stub .actions{display:flex;gap:8px}
-.stub .btn{padding:9px 16px;font-size:0.8125rem}
+.ticket-info{padding:16px 2px 0}
+.ticket-nombre{font-size:1.0625rem;font-weight:700;letter-spacing:-0.015em;line-height:1.3}
+.ticket-meta{color:var(--text-dim);font-size:0.8125rem;margin-top:4px}
 .soldout{opacity:.5}
-.soldout .btn.buy{pointer-events:none}
-.tag-soldout{font-size:0.75rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim)}
 .ticket.pasado .art{filter:grayscale(1)}
 
 /* ---------- DETALLE DE EVENTO ----------
@@ -856,6 +846,7 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .nav-user .user-ico{width:17px;height:17px}
   .tabs{order:3;width:100%;justify-content:flex-start;gap:4px}
   .tab{padding:8px 12px;font-size:0.8125rem}
+  .grid{grid-template-columns:1fr}
   .form-grid{grid-template-columns:1fr}
   .detail-wrap{padding:24px 16px 48px}
   .d-bloque{margin-top:40px}
