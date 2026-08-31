@@ -203,25 +203,23 @@ body > nav{
 
 /* ---------- HERO ---------- */
 .hero{position:relative;padding:96px 24px 80px;text-align:center;border-bottom:1px solid var(--border);overflow:hidden}
-.hero > *:not(.hero-bg){position:relative;z-index:1}
-/* Fondo del hero: la foto del evento destacado, grande, desenfocada y
-   oscurecida con una capa negra encima — mismo tratamiento que .detail-bg,
-   pero vive adentro de la sección en vez de fijo a toda la ventana.
-   pintarFondoHero() (app.js) elige el primer próximo evento con foto.
-   Sin evento con foto, .sin-foto cae en el logo bien atenuado. */
-.hero-bg{
-  position:absolute;inset:-80px;z-index:0;
+.hero > *{position:relative;z-index:1}
+/* Fondo del hero: el logo de Bronx con el mismo tratamiento que .detail-bg
+   (blur 72px + capa negra plana al 75%) — misma "función" visual, pero acá
+   la imagen es siempre el logo, fija, sin depender de ningún evento. El
+   detalle usa la foto real de ESE evento; acá no hay evento que elegir.
+   Dos pseudo-elementos en vez de uno: ::before trae la imagen desenfocada,
+   ::after la capa encima — un solo elemento con filter:blur también
+   desenfocaría la capa (no se nota en un color plano, pero separarlos deja
+   la capa siempre nítida y es más fácil de ajustar cada una por separado). */
+.hero::before{
+  content:"";position:absolute;inset:-80px;z-index:0;
+  background-image:url("/iconos/logo-bronx.png");
   background-size:cover;background-position:center;
   filter:blur(72px);
   pointer-events:none;
 }
-.hero-bg::after{content:"";position:absolute;inset:0;background:rgba(8,8,10,.75)}
-.hero-bg.sin-foto{
-  background-image:url("/iconos/logo-bronx.png");
-  background-size:46% auto;background-repeat:no-repeat;background-position:center;
-  filter:none;opacity:.05;
-}
-.hero-bg.sin-foto::after{display:none}
+.hero::after{content:"";position:absolute;inset:0;z-index:0;background:rgba(8,8,10,.75);pointer-events:none}
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
   color:var(--text-dim);margin-bottom:16px;
@@ -282,7 +280,8 @@ body > nav{
   filter:blur(72px);
 }
 .detail-bg::after{content:"";position:absolute;inset:0;background:rgba(8,8,10,.75)}
-/* Evento sin foto: el logo atenuado, mismo tratamiento que .hero-bg.sin-foto */
+/* Evento sin foto: el logo atenuado sin blur — a diferencia del hero, acá
+   no lleva el tratamiento de blur+capa; es sólo un respaldo. */
 .detail-bg:not([style*="background-image"]){
   background-image:url("/iconos/logo-bronx.png");
   background-size:46% auto;background-repeat:no-repeat;background-position:center;

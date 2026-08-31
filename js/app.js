@@ -252,23 +252,6 @@ async function loadEvents(){
 }
 // [loadEvents(); -> ahora se llama desde initPage()]
 
-/* Fondo del hero: la foto del "evento destacado" — acá, sin un campo propio
-   para eso, el primer próximo evento con foto en EVENTS (ya viene ordenado
-   por id.asc desde loadEvents). Sin ninguno con foto, se queda el logo
-   atenuado que trae el markup por defecto. */
-function pintarFondoHero(){
-  const bg = document.getElementById("hero-bg");
-  if(!bg) return;
-  const destacado = EVENTS.find(ev => ev.foto_url);
-  if(destacado){
-    bg.classList.remove("sin-foto");
-    bg.style.backgroundImage = `url('${destacado.foto_url}')`;
-  } else {
-    bg.classList.add("sin-foto");
-    bg.style.backgroundImage = "";
-  }
-}
-
 /* ================== DETALLE ================== */
 let cur = null;       // el evento abierto en el detalle
 let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
@@ -2544,7 +2527,6 @@ async function initPage(){
     await cargarTipos();
     await cargarVentasTipo();
     await loadEvents();
-    pintarFondoHero();
     await loadPasados();
     checkReturnFromPayment();
 
