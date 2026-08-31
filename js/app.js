@@ -406,7 +406,7 @@ function filaTipoHTML(t, eventoAgotadoYa){
   const pie = (!sinCupo && t.cantidad != null)
     ? `<div class="tipo-maximo">Máximo ${tope} por compra</div>` : "";
 
-  return `<div class="tipo-card${sinCupo ? " agotado" : ""}">
+  return `<div class="tipo-card${sinCupo ? " agotado" : ""}${elegidas > 0 ? " elegida" : ""}">
     <div class="tipo-card-top">
       <div class="tipo-nombre">${esc(t.nombre)}</div>
       ${detalles.join("")}
@@ -425,7 +425,14 @@ function chTipo(tipoId, delta){
   const nueva = Math.min(tope, Math.max(0, (Number(SELECCION[tipoId]) || 0) + delta));
   SELECCION[tipoId] = nueva;
   const el = document.getElementById("qty-" + tipoId);
-  if(el) el.textContent = nueva;
+  if(el){
+    el.textContent = nueva;
+    // La tarjeta queda marcada mientras tenga cantidad. Se toca la clase acá
+    // en vez de re-renderizar: redibujar la lista en cada clic perdería el
+    // foco del botón que acabás de apretar.
+    const card = el.closest(".tipo-card");
+    if(card) card.classList.toggle("elegida", nueva > 0);
+  }
   actualizarResumenDetalle();
 }
 // Los tipos elegidos, con su cantidad, en el orden en que se muestran

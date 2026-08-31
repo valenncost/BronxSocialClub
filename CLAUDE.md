@@ -67,12 +67,13 @@ Every HTML page loads the same `js/app.js` and `css/estilos.css`, and declares w
 - `--ok`/`--warn`/`--bad` for semantic states (scanner, purchase status).
 
 **Rules the stylesheet enforces — keep to them when adding UI:**
-- The background is flat black. **No glows, no radial background gradients, no colored shadows, no grain texture.** All of those were removed; adding one back reverts the rebrand.
-- `--accent` is only for the primary button, active states, and small details. `--accent-2` and `--gradient` belong to the logo — don't paint text or surfaces with them.
-- The only `linear-gradient`s left are black scrims for legibility over photos and the "Ver más" mask. Not decorative.
+- The background is flat black plus a **luz de ambiente**: two static radial halos on `body::before` (fixed, `z-index:-1`, `pointer-events:none`) at alpha `0.055` orange and `0.035` pink. The intent is club lighting, not a glow — measured, they lift the background by about 6/255. If a halo reads as a visible smudge it's too strong. **No blur and no animation on that layer**, and the old full-strength glows and the grain texture stay gone.
+- Accent light is allowed only in these four places, at these strengths: card hover border `rgba(245,140,41,0.25)`; input focus ring `0 0 0 3px rgba(245,140,41,0.12)`; primary-button hover `0 4px 16px rgba(245,140,41,0.20)`; selected item (`.tipo-card.elegida`, `.dash-nav-item.activo`) accent border over `rgba(245,140,41,0.04)`. Secondary buttons deliberately cast no shadow — that reserve belongs to the primary.
+- Otherwise `--accent` is for the primary button, active states, and small details. `--accent-2` and `--gradient` belong to the logo — don't paint text or surfaces with them.
+- The only `linear-gradient`s are black scrims for legibility over photos and the "Ver más" mask. Not decorative.
 - Type is **Inter** (400/500/600/700/800). Scale is set once on `h1`–`h4` and on a shared label rule (`label`, `th`, `.d-section-title`, `.tipos-titulo`, …) — reuse those instead of restating sizes. No forced uppercase on long titles.
-- Spacing on a 4px scale. Radii: 8px inputs/buttons, 12px cards, 999px pills. Shadow only on `.modal`.
-- Transitions are `150ms ease` (`var(--transicion)`). **No entrance animations** — the `fadeUp` keyframe and its staggered `nth-child` delays were deleted.
+- Spacing on a 4px scale. Radii: 8px inputs/buttons, 12px cards, 999px pills. Box shadows only on `.modal` and the accent-light cases above.
+- Transitions are `150ms ease` (`var(--transicion)`). **No entrance animations** — the `fadeUp` keyframe and its staggered `nth-child` delays were deleted. Note headless Chrome reports `prefers-reduced-motion: reduce` by default, so screenshots always come out with transitions off; that's the reduced-motion rule working, not a bug.
 - No emoji in the interface. `✕` (close) and `✓` (valid at the door) stay — they're typographic symbols, not emoji.
 - **Don't put widths in inline `style=` attributes.** Use the modifiers: `section.angosta` (480px single-column page — cuenta, escáner), `.btn.ancho` (full-width button), `.alta-staff` (the team-email input row). Layout that repeats belongs in the stylesheet, not in five copies of `style="width:100%"`.
 

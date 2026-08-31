@@ -47,6 +47,17 @@ body{
 }
 img,video,iframe,canvas{max-width:100%;height:auto}
 a{color:inherit}
+
+/* Luz de ambiente: dos halos estáticos, casi imperceptibles, sobre el negro.
+   Es iluminación de club, no un glow. Si se llega a ver "una mancha" es que
+   están muy fuertes — subir estos alfas es volver al tema viejo.
+   Sin blur y sin animación a propósito. */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 45% at 20% 0%, rgba(245,140,41,0.055), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 85% 60%, rgba(244,82,107,0.035), transparent 70%);
+}
 ::selection{background:var(--accent);color:#0A0A0A}
 a:focus-visible,button:focus-visible,input:focus-visible,
 textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -87,15 +98,17 @@ section.angosta{max-width:480px}
   font-family:inherit;font-size:0.875rem;font-weight:600;line-height:1.2;
   padding:12px 20px;border-radius:var(--radio-campo);
   background:var(--accent);color:#0A0A0A;
-  transition:opacity var(--transicion),background var(--transicion),border-color var(--transicion);
+  transition:opacity var(--transicion),background var(--transicion),
+             border-color var(--transicion),box-shadow var(--transicion);
 }
-.btn:hover{opacity:.9}
+.btn:hover{opacity:.9;box-shadow:0 4px 16px rgba(245,140,41,0.20)}
 /* Deshabilitado se apaga a superficie: el naranja bajado de opacidad sobre
    negro da un marrón sucio que no se lee como "inactivo". */
 .btn:disabled{background:var(--surface-2);border-color:var(--border);color:var(--text-faint);cursor:default}
-.btn:disabled:hover{opacity:1}
+.btn:disabled:hover{opacity:1;box-shadow:none}
 .btn.ghost{background:transparent;border-color:var(--border);color:var(--text)}
-.btn.ghost:hover{opacity:1;background:var(--surface-2)}
+/* El secundario no levanta luz: esa reserva es del primario */
+.btn.ghost:hover{opacity:1;background:var(--surface-2);box-shadow:none}
 .btn.ancho{width:100%;display:block}
 .btn-mini{padding:8px 14px;font-size:0.8125rem}
 
@@ -127,7 +140,10 @@ input,textarea,select{
   padding:12px;
   transition:border-color var(--transicion);
 }
-input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+input:focus,textarea:focus,select:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(245,140,41,0.12);
+}
 input::placeholder,textarea::placeholder{color:var(--text-faint)}
 textarea{min-height:96px;resize:vertical}
 select{cursor:pointer}
@@ -201,7 +217,7 @@ body > nav{
   overflow:hidden;display:flex;flex-direction:column;
   transition:background var(--transicion),border-color var(--transicion);
 }
-.ticket:hover{background:var(--surface-2);border-color:#2A2A31}
+.ticket:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
 .art{
   position:relative;height:180px;cursor:pointer;
   display:flex;align-items:flex-end;padding:20px;
@@ -244,7 +260,10 @@ body > nav{
   filter:blur(72px) brightness(.18);transform:scale(1.25);
 }
 .detail-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,10,.75),rgba(8,8,10,.97))}
-.detail-bg:not([style*="background-image"]){background:var(--bg)}
+/* Evento sin foto: la capa se corre entera para que se vea la luz de
+   ambiente del body, en vez de taparla con un negro opaco. */
+.detail-bg:not([style*="background-image"]){background:transparent}
+.detail-bg:not([style*="background-image"])::after{display:none}
 .detail-wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:32px 24px 64px}
 .detail-cols{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:48px;align-items:start}
 .detail-left h1{font-size:clamp(1.75rem,4vw,2.75rem);margin-bottom:16px}
@@ -293,12 +312,14 @@ body > nav{
 
 .tipo-card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
-  padding:20px;transition:background var(--transicion);
+  padding:20px;transition:background var(--transicion),border-color var(--transicion);
 }
 .tipo-card + .tipo-card{margin-top:12px}
-.tipo-card:hover{background:var(--surface-2)}
+.tipo-card:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+/* Con cantidad elegida: la marca queda encendida aunque saques el mouse */
+.tipo-card.elegida{border-color:var(--accent);background:rgba(245,140,41,0.04)}
 .tipo-card.agotado{opacity:.45}
-.tipo-card.agotado:hover{background:var(--surface)}
+.tipo-card.agotado:hover{background:var(--surface);border-color:var(--border)}
 .tipo-card.agotado .tipo-nombre{text-decoration:line-through}
 .tipo-nombre{font-size:0.9375rem;font-weight:600}
 .tipo-desc{color:var(--text-dim);font-size:0.875rem;margin-top:4px}
@@ -432,8 +453,9 @@ body > nav{
   transition:background var(--transicion),color var(--transicion);
 }
 .dash-nav-item svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.dash-nav-item{border:1px solid transparent}
 .dash-nav-item:hover{background:var(--surface-2);color:var(--text)}
-.dash-nav-item.activo{background:var(--surface-2);color:var(--accent)}
+.dash-nav-item.activo{background:rgba(245,140,41,0.04);border-color:var(--accent);color:var(--accent)}
 .dash-side-pie{display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-top:1px solid var(--border)}
 .dash-link{
   background:none;border:none;cursor:pointer;text-align:left;
@@ -488,9 +510,9 @@ body > nav{
 .ev-admin-item{
   display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:16px 20px;
-  transition:background var(--transicion);
+  transition:background var(--transicion),border-color var(--transicion);
 }
-.ev-admin-item:hover{background:var(--surface-2)}
+.ev-admin-item:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
 .ev-admin-item .info b{display:block;font-weight:600}
 .ev-admin-item .info span{font-size:0.8125rem;color:var(--text-dim)}
 .ev-admin-item .row-actions{display:flex;gap:8px}
