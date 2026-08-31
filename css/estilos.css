@@ -299,12 +299,16 @@ body > nav{
   radial-gradient(ellipse 32% 24% at 50% 100%, rgba(247,147,30,0.16), transparent 70%)}
 /* El slide "rojo" desatura el logo de fondo (ver .hero[data-tinte="rojo"]::before
    más abajo), así que a diferencia de "naranja" —que ya arranca de un logo
-   naranja— acá TODO el color rojo sale de este tinte. Al mismo alfa que el
-   de arriba quedaba casi idéntico al slide "neutro" (sin tinte): subido
-   bastante más fuerte para que se lea como rojo sin dudas. */
+   naranja— acá TODO el color rojo sale de este tinte, y no le alcanza con
+   subir el alfa: el halo de "naranja" está anclado arriba a la izquierda
+   (20% 0%) a propósito, como luz de ambiente asimétrica, pero eso lo apaga
+   antes de llegar al título en un hero alto/con el texto envuelto en varias
+   líneas (mobile) — quedaba rojo arriba del eyebrow y neutro justo detrás
+   de "Jueves Picante", que es lo que se veía como "sin cambios". Acá el
+   halo va centrado y bien más grande para que llegue al título sí o sí. */
 .hero-tinte[data-tinte="rojo"]{background:
-  radial-gradient(ellipse 65% 50% at 20% 0%, rgba(255,59,48,0.30), transparent 70%),
-  radial-gradient(ellipse 38% 30% at 50% 100%, rgba(193,18,31,0.42), transparent 70%)}
+  radial-gradient(ellipse 95% 75% at 50% 15%, rgba(255,59,48,0.30), transparent 72%),
+  radial-gradient(ellipse 45% 35% at 50% 100%, rgba(193,18,31,0.42), transparent 70%)}
 
 .eyebrow{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
