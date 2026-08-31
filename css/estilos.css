@@ -527,9 +527,12 @@ body > nav{
   transition:background var(--transicion),color var(--transicion);
 }
 .dash-nav-item svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.dash-nav-item{border:1px solid transparent}
 .dash-nav-item:hover{background:var(--surface-2);color:var(--text)}
-.dash-nav-item.activo{background:rgba(245,140,41,0.04);border-color:var(--accent);color:var(--accent)}
+/* Activo: fondo --surface-2 y texto --accent, sin borde -- spec explícita
+   del rediseño del Studio. Antes llevaba un borde + fondo naranja a alfa
+   bajo; ese tratamiento se usa en otro lado (.tipo-card.elegida) pero acá
+   se pidió este más simple. */
+.dash-nav-item.activo{background:var(--surface-2);color:var(--accent)}
 .dash-side-pie{display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-top:1px solid var(--border)}
 .dash-link{
   background:none;border:none;cursor:pointer;text-align:left;
