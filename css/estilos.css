@@ -353,6 +353,32 @@ body > nav{
    recrearlo en CSS ni tocar sus colores (script rojo + blanco propios). */
 .hero-logo-jueves{max-width:280px;width:60%;height:auto;margin:8px auto 0;display:block}
 
+/* Slide "Bronx general" (bronx-2.jpg): sin título centrado — en vez de eso
+   una frase pegada abajo a la izquierda de todo el hero, fuera de la
+   columna centrada de 900px de #hero-slides (por eso vive afuera de ese
+   contenedor, como hijo directo de .hero) para llegar de verdad al borde
+   izquierdo. Cruza con el mismo mecanismo que el resto: opacity por
+   data-tinte, mismos 600ms. "BRONX" en rojo suelto, no el degradado de
+   identidad de --accent-gradient (ese es para .hero h1 em, esto es otro
+   elemento a propósito).
+   El selector va calificado como ".hero > p.hero-caption-bronx" (no sólo
+   ".hero-caption-bronx") a propósito: por especificidad sola, tanto
+   ".hero > *:not(.hero-bg){position:relative}" como ".hero p{max-width,
+   margin}" — las dos reglas genéricas de más arriba — le ganaban a una
+   clase sencilla y pisaban el position:absolute y el margin/max-width de
+   acá, dejando el texto centrado en flujo normal en vez de abajo a la
+   izquierda. */
+.hero > p.hero-caption-bronx{
+  position:absolute;left:24px;bottom:28px;z-index:1;
+  max-width:380px;margin:0;text-align:left;
+  font-size:clamp(1.125rem,2.4vw,1.5rem);font-weight:700;letter-spacing:-0.01em;line-height:1.3;
+  color:var(--text);
+  opacity:0;pointer-events:none;
+  transition:opacity 600ms ease;
+}
+.hero[data-tinte="neutro"] .hero-caption-bronx{opacity:1}
+.hero-caption-bronx em{font-style:normal;color:#FF3B30}
+
 /* Botón "Ver próximos eventos": se retiñe con el slide activo (mismo
    data-tinte del carrusel) y su color anima igual que el título y el halo —
    600ms, ease, sincronizado con el cross-fade de los slides. El degradado en
@@ -362,6 +388,17 @@ body > nav{
   background:var(--accent-gradient);
   box-shadow:0 0 24px rgba(255,107,53,.30);
   transition:background 600ms ease,box-shadow 600ms ease,opacity var(--transicion);
+}
+/* Cachengue: se pidió el botón más transparente / del tono azul-verdoso
+   propio de la foto, en vez del degradado naranja de marca — vidrio
+   esmerilado oscuro con un borde claro fino para que se distinga del
+   fondo sin tapar la foto detrás. */
+.hero[data-tinte="naranja"] .btn{
+  background:rgba(20,38,46,.45);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.25);
+  color:#fff;
+  box-shadow:0 4px 20px rgba(0,0,0,.25);
 }
 .hero[data-tinte="rojo"] .btn{
   background:linear-gradient(135deg,#FF3B30,#C1121F);
@@ -933,6 +970,7 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .hero-bg::after{background:
     linear-gradient(0deg, rgba(13,13,13,.97) 0%, transparent 75%),
     rgba(0,0,0,.35)}
+  .hero > p.hero-caption-bronx{left:16px;bottom:20px;max-width:calc(100% - 32px)}
   body > nav{padding:12px 16px;row-gap:12px}
   .logo{order:1;flex:1;min-width:0}
   .logo img{height:22px}
