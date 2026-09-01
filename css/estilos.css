@@ -263,6 +263,16 @@ body > nav{
   transition:opacity 600ms ease;
 }
 .hero-bg-slide.activa{opacity:1}
+/* Bronx general: la foto (bronx-2.jpg, 1080x1350, vertical) trae su propio
+   texto pegado arriba del todo ("todo lo que nos gusta, está acá", ~15-26%
+   de la altura) y el cartel de neón mucho más abajo (~41-56%) — en un hero
+   ancho y bajo el cover sólo deja ver una franja de ~25% de la altura de la
+   foto, así que texto y cartel no entran juntos ni con el doble de zoom:
+   hay que elegir uno. Se prioriza el texto (lo pidieron legible) con
+   background-position en 10% en vez de 50%, así la franja visible cae
+   sobre el texto con aire arriba y abajo en vez de sobre el cielo vacío del
+   medio (el recorte por default) o el cartel. */
+.hero-bg-slide[data-tinte="neutro"]{background-position:center 10%;transform:scale(1.08)}
 .hero-bg::after{
   content:"";position:absolute;inset:0;
   background:
