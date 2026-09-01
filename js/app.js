@@ -279,8 +279,15 @@ async function loadEvents(){
    El track se arma con la lista de sponsors DUPLICADA una vez, seguida: la
    animación CSS (patrocinadores-scroll en estilos.css) corre translateX de
    0 a -50%, así el segundo tramo empalma exacto con el primero y el loop no
-   se nota. Sin sponsors activos, la sección entera queda oculta. */
+   se nota. Sin sponsors activos, la sección entera queda oculta.
+
+   Cada .marquee-item arranca invisible (ver estilos.css) y recibe acá un
+   transition-delay escalonado por posición (80ms × índice, mod la cantidad
+   real de sponsors — así la copia duplicada del loop repite el mismo ritmo
+   en vez de acumular delay); un IntersectionObserver agrega ".visible" a la
+   sección la primera vez que entra en el viewport, disparando la cascada. */
 let PATROCINADORES_PUB = [];
+let obsPatrocinadores = null;
 async function loadPatrocinadores(){
   const sec = document.getElementById("patrocinadores-sec");
   if(!sec) return;
@@ -295,7 +302,25 @@ async function loadPatrocinadores(){
   };
   const html = PATROCINADORES_PUB.map(item).join("");
   track.innerHTML = html + html;
+  sec.classList.remove("visible");
+  const n = PATROCINADORES_PUB.length;
+  track.querySelectorAll(".marquee-item").forEach((el, i)=>{
+    el.style.transitionDelay = (i % n) * 80 + "ms";
+  });
+
   sec.style.display = "";
+
+  if(obsPatrocinadores) obsPatrocinadores.disconnect();
+  if("IntersectionObserver" in window){
+    obsPatrocinadores = new IntersectionObserver((entries)=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){ sec.classList.add("visible"); obsPatrocinadores.disconnect(); }
+      });
+    }, {threshold:0.2});
+    obsPatrocinadores.observe(sec);
+  } else {
+    sec.classList.add("visible");   // sin soporte, se muestran directo
+  }
 }
 
 /* ================== CARRUSEL DEL HERO ==================
