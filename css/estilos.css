@@ -269,21 +269,16 @@ body > nav{
     linear-gradient(0deg, rgba(13,13,13,.95) 0%, transparent 60%),
     rgba(0,0,0,.25);
 }
-/* Cachengue: sin degradado encima de la foto — pedido explícito, se ve la
-   imagen limpia con sólo el texto arriba. (Antes tenía acá un degradado más
-   opaco para tapar un logo "BRONX" semi-transparente propio de la foto; ese
-   logo queda visible detrás del texto ahora que no hay overlay — es la
-   contrapartida consciente de este pedido.)
-   El glow de acento sí vuelve, pero bajo: la versión pareja (.35 de opacidad,
-   blur 70px) se veía como un recuadro redondeado encima de la foto porque su
-   borde quedaba demasiado marcado contra una imagen clara. Acá va mucho más
-   tenue (.15) y con el doble de blur (140px, el doble del tamaño para que
-   quepa sin recortarse) para que sea sólo una luz difusa detrás del título,
-   sin un borde reconocible. Los otros dos slides no se tocan. */
+/* Cachengue: sin degradado ni glow encima de la foto — pedido explícito, se
+   ve la imagen limpia con sólo el texto arriba. (Antes tenía acá un
+   degradado más opaco para tapar un logo "BRONX" semi-transparente propio
+   de la foto; ese logo queda visible detrás del texto ahora que no hay
+   overlay — es la contrapartida consciente de este pedido.)
+   Se probó devolver el glow bien tenue (.15 de opacidad, blur 140px) pero
+   incluso así se seguía viendo como un recuadro encima de la foto — se saca
+   del todo, no sólo bajarle la intensidad. Los otros dos slides no se tocan. */
 .hero[data-tinte="naranja"] .hero-bg::after{background:none}
-.hero[data-tinte="naranja"] .hero-glow.activo{
-  opacity:.15;width:min(900px,140%);height:360px;filter:blur(140px);
-}
+.hero[data-tinte="naranja"] .hero-glow.activo{opacity:0}
 /* Jueves Picante: el cartel "PICANTE" de la foto (la parte más cargada) cae
    justo en el tercio superior, donde va el eyebrow gris — se perdía. Un
    segundo degradado, de arriba hacia abajo esta vez, oscurece sólo ese
