@@ -569,6 +569,121 @@ body > nav{
 .total.mini b{font-size:0.875rem;font-weight:500;color:var(--text-dim)}
 .compra-item{display:flex;justify-content:space-between;gap:12px;font-size:0.875rem;color:var(--text-dim);padding:4px 0}
 .compra-item b{color:var(--text);font-weight:600;white-space:nowrap}
+
+/* ---------- CHECKOUT DE 4 PASOS ----------
+   El modal es más ancho que el resto y su tarjeta es #1A1A1A (un escalón
+   más clara que --surface) para despegarse del fondo del overlay. Todo el
+   cuerpo lo dibuja renderCheckout() en app.js; acá van los estados.
+   Pensado a una columna: en móvil compra el 95% de la gente, así que la
+   versión angosta es la de referencia y la de escritorio es la excepción. */
+.modal-checkout{max-width:520px;background:#1A1A1A;border-radius:20px}
+
+/* Stepper: círculo numerado por paso, unidos por una línea que se pinta de
+   blanco hasta el paso activo y queda gris después. La línea es un ::before
+   de cada paso hacia el anterior (por eso el primero no la dibuja), y va
+   detrás de los círculos con z-index. */
+.ck-stepper{display:flex;list-style:none;margin:20px 0 28px;padding:0}
+.ck-step{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;min-width:0}
+.ck-step::before{
+  content:"";position:absolute;top:15px;right:50%;width:100%;height:2px;
+  background:#2A2A2A;z-index:0;
+}
+.ck-step:first-child::before{display:none}
+.ck-step.activo::before,.ck-step.hecho::before{background:#FFFFFF}
+.ck-circulo{
+  position:relative;z-index:1;
+  width:32px;height:32px;border-radius:999px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.8125rem;font-weight:700;
+  background:#2A2A2A;color:var(--text-faint);
+}
+.ck-step.activo .ck-circulo,.ck-step.hecho .ck-circulo{background:#FFFFFF;color:#0A0A0A}
+.ck-label{font-size:0.6875rem;line-height:1.3;color:var(--text-faint)}
+.ck-step.activo .ck-label{color:#FFFFFF;font-weight:700}
+
+/* Paso 1: ítems del carrito */
+.ck-item{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+.ck-item-info{flex:1;min-width:0}
+.ck-item-nombre{
+  font-size:0.875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ck-item-precio{font-size:0.8125rem;color:var(--text-dim);margin-top:2px}
+.ck-item-qty{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.ck-item-qty b{font-size:0.9375rem;font-weight:600;min-width:16px;text-align:center}
+.ck-icon-btn{
+  width:34px;height:34px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:var(--radio-campo);
+  background:transparent;color:var(--text);cursor:pointer;
+  transition:border-color var(--transicion),background var(--transicion);
+}
+.ck-icon-btn:hover{background:var(--surface-2);border-color:var(--accent)}
+.ck-icon-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* Fila del cupón: se abre/cierra sola, el input queda montado siempre para
+   no perder lo tipeado al re-renderizar el paso. */
+.ck-cupon-fila{
+  display:flex;align-items:center;gap:10px;width:100%;
+  background:none;border:none;padding:16px 0;cursor:pointer;
+  color:var(--text);font-family:inherit;font-size:0.875rem;text-align:left;
+}
+.ck-cupon-fila svg{width:17px;height:17px;flex-shrink:0;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ck-cupon-fila .ck-chevron{margin-left:auto;stroke:var(--text-dim);transition:transform var(--transicion)}
+.ck-cupon-fila[aria-expanded="true"] .ck-chevron{transform:rotate(180deg)}
+.ck-cupon-caja{display:flex;gap:8px;padding-bottom:16px}
+.ck-cupon-caja input{flex:1;min-width:0;text-transform:uppercase}
+.ck-cupon-caja .btn{width:auto;flex-shrink:0}
+
+/* Resumen alineado a la derecha */
+.ck-resumen{border-top:1px solid var(--border);padding-top:16px;margin-top:8px}
+.ck-linea{display:flex;justify-content:flex-end;gap:24px;font-size:0.875rem;color:var(--text-dim);padding:5px 0}
+.ck-linea b{color:var(--text);font-weight:500;min-width:96px;text-align:right}
+.ck-linea.ck-total{
+  border-top:1px solid var(--border);margin-top:10px;padding-top:14px;
+  font-size:1rem;color:var(--text);font-weight:700;
+}
+.ck-linea.ck-total b{font-size:1.375rem;font-weight:700}
+
+/* Paso 2 y 3: formularios a una sola columna, label arriba de cada campo */
+.ck-campos{display:flex;flex-direction:column;gap:14px}
+.ck-campo label{display:block;margin-bottom:6px}
+.ck-campo input,.ck-campo select{width:100%;background:#222226}
+.ck-error{color:var(--bad);font-size:0.8125rem;margin-top:6px}
+.ck-tel{display:flex;gap:8px}
+.ck-tel select{width:auto;flex-shrink:0;max-width:130px}
+.ck-tel input{flex:1;min-width:0}
+
+/* Los dos caminos (invitado / iniciar sesión) antes del formulario */
+.ck-caminos{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.ck-camino{
+  display:block;width:100%;text-align:left;cursor:pointer;font-family:inherit;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  padding:16px;color:var(--text);
+  transition:border-color var(--transicion),background var(--transicion);
+}
+.ck-camino:hover{background:var(--surface-2);border-color:var(--accent)}
+.ck-camino b{display:block;font-size:0.9375rem;font-weight:600}
+.ck-camino span{display:block;font-size:0.8125rem;color:var(--text-dim);margin-top:4px}
+
+/* Paso 3: un bloque por entrada */
+.ck-ticket{border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px;background:var(--surface)}
+.ck-ticket-titulo{margin-bottom:12px}
+.ck-check{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:0.8125rem;color:var(--text-dim);cursor:pointer}
+.ck-check input{width:16px;height:16px;flex-shrink:0;accent-color:var(--accent);cursor:pointer}
+
+/* Paso 4: resumen de sólo lectura */
+.ck-repaso{border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px;background:var(--surface)}
+.ck-repaso h4{margin-bottom:10px}
+.ck-dato{display:flex;justify-content:space-between;gap:16px;font-size:0.875rem;padding:3px 0;color:var(--text-dim)}
+.ck-dato b{color:var(--text);font-weight:500;text-align:right;word-break:break-word}
+
+/* Pie de cada paso: Volver a la izquierda, Siguiente/Pagar a la derecha */
+.ck-pie{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:24px}
+.ck-pie .btn{width:auto;min-width:132px}
+.ck-pie .btn.ghost{min-width:104px}
+.ck-pie-solo{justify-content:flex-end}
+
 .attendee-row{display:flex;gap:8px;margin-bottom:12px;align-items:flex-start}
 .attendee-row .num{font-size:0.8125rem;color:var(--text-faint);min-width:20px;text-align:center;padding-top:10px}
 .attendee-campos{flex:1;min-width:0}
@@ -915,6 +1030,11 @@ body.app-instalada{padding-bottom:env(safe-area-inset-bottom,0px)}
 .marquee-item:hover img,.marquee-item img:focus-visible{opacity:1;transform:scale(1.05)}
 @keyframes patrocinadores-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
+/* Recuperar entradas por email (Mis Entradas), para el que compró de invitado */
+.recuperar-caja{margin-top:48px;padding-top:32px;border-top:1px solid var(--border)}
+.recuperar-caja h3{margin-bottom:6px}
+.recuperar-caja .sub{margin-bottom:16px}
+
 /* ---------- FOOTER ---------- */
 footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;color:var(--text-faint);font-size:0.8125rem}
 .footer-logo{height:26px;width:auto;display:block;margin:0 auto 16px}
@@ -929,6 +1049,18 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .hero-bg::after{background:
     linear-gradient(0deg, rgba(13,13,13,.97) 0%, transparent 75%),
     rgba(0,0,0,.35)}
+  /* Checkout en móvil (donde compra el 95%): el modal ocupa casi toda la
+     pantalla, el stepper se achica pero mantiene los labels, y los botones
+     del pie pasan a ancho completo con "Siguiente" arriba de "Volver". */
+  .overlay{padding:12px}
+  .modal-checkout{padding:20px 16px;max-height:94vh}
+  .ck-stepper{margin:16px 0 24px}
+  .ck-circulo{width:28px;height:28px;font-size:0.75rem}
+  .ck-step::before{top:13px}
+  .ck-label{font-size:0.625rem}
+  .ck-pie{flex-direction:column-reverse;gap:10px}
+  .ck-pie .btn,.ck-pie .btn.ghost{width:100%}
+  .ck-linea{gap:16px}
   body > nav{padding:12px 16px;row-gap:12px}
   .logo{order:1;flex:1;min-width:0}
   .logo img{height:22px}

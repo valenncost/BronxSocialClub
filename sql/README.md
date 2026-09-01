@@ -23,6 +23,7 @@ bases que ya existían antes del cambio.
 |---|---|
 | `color-evento.sql` | Agrega `eventos.color_acento` (el color de acento propio de cada evento) |
 | `patrocinadores.sql` | Tabla `patrocinadores` (fila de logos en la portada, debajo de los eventos) |
+| `checkout.sql` | Checkout de 4 pasos: datos de comprador/asistente y `user_id` en `compras`, policy de alta para invitados, y la tabla `cupones` (vacía a propósito) |
 
 ## Antes de correrlos: cambiar el mail del admin
 

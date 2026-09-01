@@ -136,31 +136,14 @@
 
 <!-- ============ MODAL COMPRA ============ -->
 <div class="overlay" id="overlay" role="dialog" aria-modal="true">
-  <div class="modal" id="modal-buy">
+  <!-- Checkout de 4 pasos. El stepper y el cuerpo de cada paso los dibuja
+       renderCheckout() en js/app.js; acá sólo queda la cáscara. -->
+  <div class="modal modal-checkout" id="modal-buy">
     <button class="close" onclick="closeModal()" aria-label="Cerrar">✕</button>
     <h3 id="m-title"></h3>
     <p class="mdate" id="m-date"></p>
-
-    <div class="field">
-      <label>Tu orden</label>
-      <div id="m-resumen"></div>
-    </div>
-
-    <div class="field">
-      <label>Datos de cada entrada</label>
-      <div id="attendees"></div>
-    </div>
-
-    <div class="field">
-      <label>Email (te enviamos las entradas acá)</label>
-      <input id="f-email" type="email" placeholder="tumail@ejemplo.com">
-    </div>
-
-    <p class="err" id="buy-err">Completá nombre y apellido de cada entrada</p>
-    <div class="total mini"><span id="sub-label">Entradas</span><b id="subtotal"></b></div>
-    <div class="total mini"><span id="serv-label">Costo de servicio</span><b id="serv-total"></b></div>
-    <div class="total"><span id="total-label">Total</span><b id="total"></b></div>
-    <button class="btn" id="btn-confirm" onclick="confirmBuy()">Pagar con Mercado Pago</button>
+    <ol class="ck-stepper" id="ck-stepper"></ol>
+    <div id="ck-cuerpo"></div>
   </div>
 
   <div class="modal" id="modal-done" style="display:none">

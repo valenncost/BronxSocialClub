@@ -37,6 +37,20 @@
       <button class="btn" onclick="go('cuenta')">Iniciar sesión</button>
     </div>
     <div id="my-tickets"></div>
+
+    <!-- Compra de invitado: no hay sesión que las liste, así que se reenvían
+         al mail con el que se compró. Nunca se muestran en pantalla sin
+         verificar quién pide (ver recuperarEntradas en js/app.js). -->
+    <div class="recuperar-caja">
+      <h3>¿Compraste sin cuenta?</h3>
+      <p class="sub">Poné el email con el que compraste y te reenviamos las entradas a esa casilla.</p>
+      <div class="alta-staff">
+        <input type="email" id="rec-email" placeholder="tumail@ejemplo.com" onkeydown="if(event.key==='Enter')recuperarEntradas()">
+        <button class="btn" id="rec-btn" onclick="recuperarEntradas()">Reenviar entradas</button>
+      </div>
+      <p class="ok" id="rec-ok"></p>
+      <p class="err" id="rec-err"></p>
+    </div>
   </section>
 </div>
 

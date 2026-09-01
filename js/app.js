@@ -9,7 +9,10 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // El login del Admin ahora usa Supabase Auth (email + contraseña). Ya no hay contraseña en el código.
 let ADMIN_TOKEN = null;   // se completa solo al iniciar sesión
 const ADMIN_EMAIL = "costanzovalentino09@gmail.com";  // el único que administra todo
-const SERVICIO_PCT = 0.08;  // costo por servicio: 8% del valor de la entrada
+// Costo por servicio: 10% del valor de la entrada, lo paga el comprador y se
+// suma al total. Único lugar donde vive el porcentaje — el cálculo
+// (servicioDe) y los textos de la UI salen los dos de acá.
+const SERVICIO_PCT = 0.10;
 let ROL = null;  // "admin" | "staff" (equipo de escáner)
 
 /* ============================================================ */
@@ -591,121 +594,485 @@ function actualizarResumenDetalle(){
   if(sinVenta(cur)){ btn.textContent = "Entradas próximamente"; btn.disabled = true; return; }
   if(!s.entradas){ btn.textContent = "Elegí tus entradas"; btn.disabled = true; return; }
   btn.disabled = false;
-  btn.textContent = (USER || DEMO)
-    ? `Comprar ${s.entradas} ${s.entradas === 1 ? "entrada" : "entradas"} · ${fmt(s.total)}`
-    : "Ingresá para comprar";
-  btn.onclick = ()=>openBuy(cur.id);
+  // Ya no hace falta tener sesión para comprar: el paso 2 del checkout
+  // ofrece seguir como invitado (ver "CHECKOUT DE 4 PASOS").
+  btn.textContent = `Comprar ${s.entradas} ${s.entradas === 1 ? "entrada" : "entradas"} · ${fmt(s.total)}`;
+  btn.onclick = ()=>abrirCheckout(cur.id);
 }
 
-/* ================== COMPRA ================== */
-function openBuy(id){
-  // Comprar requiere sesión: guardar el evento y mandar a ingresar
-  if(!USER && !DEMO){
-    try{ localStorage.setItem("tp_volver", "/?evento="+id); }catch(e){}
-    go('cuenta');
-    return;
-  }
+/* ================== CHECKOUT DE 4 PASOS ==================
+   Un solo modal con stepper arriba: 1 Revisá tu orden · 2 Comprador ·
+   3 Tickets · 4 Confirmación. Todo el cuerpo se dibuja desde acá
+   (renderCheckout) sobre la cáscara que está en index.html.
+
+   Regla que se repite en todo el archivo y también acá: los inputs escriben
+   en el estado (CK) con oninput y NO re-renderizan, porque redibujar en cada
+   tecla pierde el foco a mitad de palabra. Sólo re-renderizan los cambios de
+   estructura (cambiar de paso, sumar/restar una entrada, tildar "usar mis
+   datos"). Lo que sí se refresca en vivo es el cartel de error y el estado
+   del botón "Siguiente", que se tocan por id. */
+
+const CK_PASOS = ["Revisá tu orden", "Comprador", "Tickets", "Confirmación"];
+
+/* El selector de país del teléfono. Argentina primero porque es el default
+   real del negocio (un boliche de Bahía Blanca); el resto son los países
+   desde donde algún turista podría comprar. */
+const CK_PAISES = [
+  { cod:"+54",  pais:"Argentina", bandera:"🇦🇷" },
+  { cod:"+598", pais:"Uruguay",   bandera:"🇺🇾" },
+  { cod:"+56",  pais:"Chile",     bandera:"🇨🇱" },
+  { cod:"+55",  pais:"Brasil",    bandera:"🇧🇷" },
+  { cod:"+595", pais:"Paraguay",  bandera:"🇵🇾" },
+  { cod:"+591", pais:"Bolivia",   bandera:"🇧🇴" },
+  { cod:"+34",  pais:"España",    bandera:"🇪🇸" },
+  { cod:"+1",   pais:"EE.UU.",    bandera:"🇺🇸" }
+];
+const CK_TIPOS_DOC = ["DNI", "Pasaporte", "Cédula", "LC", "LE"];
+
+let CK = null;   // estado del checkout abierto; null = modal cerrado
+
+function ckNuevo(){
+  return {
+    paso: 1,
+    // Sin sesión hay que elegir camino antes de ver el formulario del paso 2.
+    // Con sesión no se pregunta nada: ya sabemos quién es.
+    camino: (USER || DEMO) ? "sesion" : null,
+    comprador: {
+      nombre:   USER ? (USER.nombre   || "") : "",
+      apellido: USER ? (USER.apellido || "") : "",
+      tipo_doc: "DNI",
+      documento: "",
+      email:    USER ? (USER.email || "") : "",
+      email2:   USER ? (USER.email || "") : "",
+      pais: "+54",
+      telefono: USER ? (USER.telefono || "") : ""
+    },
+    asistentes: [],
+    usarMisDatos: false,
+    cuponAbierto: false,
+    cuponTexto: "",
+    cuponMsg: "",
+    cuponOk: false,
+    error: ""
+  };
+}
+
+/* Una ficha de asistente por QR, en el mismo orden que unidadesSeleccionadas()
+   (que es el orden en que confirmBuy las lee de vuelta). Al cambiar cantidades
+   en el paso 1 se conservan los datos ya cargados por posición. */
+function ckSincronizarAsistentes(){
+  const unidades = unidadesSeleccionadas();
+  const previos = CK.asistentes || [];
+  CK.asistentes = unidades.map((tipo, i)=>({
+    tipo_ticket_id: tipo.id,
+    tipo: tipo.nombre,
+    accesos: Number(tipo.accesos) || 1,
+    precio: Number(tipo.precio) || 0,
+    servicio: servicioDe(tipo.precio),
+    nombre:    previos[i] ? previos[i].nombre    : "",
+    apellido:  previos[i] ? previos[i].apellido  : "",
+    documento: previos[i] ? previos[i].documento : ""
+  }));
+}
+
+function abrirCheckout(id){
   cur = EVENTS.find(e=>e.id===id);
   if(!cur || !totalesSeleccion().entradas) return;
+  CK = ckNuevo();
+  ckSincronizarAsistentes();
   document.getElementById("m-title").textContent = cur.nombre;
-  document.getElementById("m-date").textContent = cur.fecha_texto + " · " + cur.lugar;
-  document.getElementById("buy-err").style.display="none";
-  renderResumenCompra(); renderAttendees(); updTotal();
-  // Autocompletar con los datos del usuario logueado
-  if(USER){
-    const fila1 = document.querySelector("#attendees .attendee-row");
-    if(fila1){
-      const n = fila1.querySelector(".a-nombre"), a = fila1.querySelector(".a-apellido");
-      if(n && !n.value) n.value = USER.nombre || "";
-      if(a && !a.value) a.value = USER.apellido || "";
-    }
-    const em = document.getElementById("f-email");
-    if(em && !em.value) em.value = USER.email || "";
-  }
-  document.getElementById("modal-buy").style.display="block";
-  document.getElementById("modal-done").style.display="none";
+  document.getElementById("m-date").textContent = [cur.fecha_texto, cur.lugar].filter(Boolean).join(" · ");
+  document.getElementById("modal-buy").style.display = "block";
+  document.getElementById("modal-done").style.display = "none";
   document.getElementById("overlay").classList.add("open");
+  renderCheckout();
 }
-// Qué se está comprando: "2x GENERAL 1"
-function renderResumenCompra(){
-  const box = document.getElementById("m-resumen");
-  if(!box) return;
-  box.innerHTML = itemsSeleccionados().map(({tipo, cantidad})=>`
-    <div class="compra-item">
-      <span>${cantidad}× ${esc(tipo.nombre)}</span>
-      <b>${fmt((Number(tipo.precio)||0) * cantidad)}</b>
-    </div>`).join("");
+
+/* ---------- Navegación entre pasos ---------- */
+function ckIr(paso){
+  if(!CK) return;
+  // Hacia adelante se valida el paso actual; hacia atrás nunca se bloquea.
+  if(paso > CK.paso && !ckPasoValido(CK.paso)) return;
+  CK.error = "";
+  CK.paso = Math.min(4, Math.max(1, paso));
+  renderCheckout();
+  const modal = document.getElementById("modal-buy");
+  if(modal) modal.scrollTop = 0;
 }
-/* Una fila por QR. Cada fila recuerda de qué tipo es, porque una misma compra
-   puede mezclar tipos distintos y cada entrada se emite con el suyo. */
-function renderAttendees(){
-  const box = document.getElementById("attendees");
-  const prev = [...box.querySelectorAll(".attendee-row")].map(r=>({n:r.querySelector(".a-nombre").value,a:r.querySelector(".a-apellido").value}));
-  box.innerHTML = "";
-  unidadesSeleccionadas().forEach((tipo, i)=>{
-    const row = document.createElement("div");
-    row.className = "attendee-row";
-    row.dataset.tipo = tipo.id;
-    row.innerHTML = `<span class="num">${i+1}</span>
-      <div class="attendee-campos">
-        <span class="attendee-tipo">${esc(tipo.nombre)}</span>
-        <div class="attendee-inputs">
-          <input class="a-nombre" placeholder="Nombre" value="${prev[i]?esc(prev[i].n):''}">
-          <input class="a-apellido" placeholder="Apellido" value="${prev[i]?esc(prev[i].a):''}">
+
+function ckPasoValido(paso){
+  if(paso === 1) return totalesSeleccion().entradas > 0;
+  if(paso === 2) return !!CK.camino && ckCompradorValido() === "";
+  if(paso === 3) return ckTicketsValido() === "";
+  return true;
+}
+
+/* Devuelven "" si está todo bien, o el texto del error a mostrar. */
+function ckCompradorValido(){
+  const c = CK.comprador;
+  if(!c.nombre.trim() || !c.apellido.trim()) return "Completá nombre y apellido.";
+  if(!c.documento.trim()) return "Completá tu número de documento.";
+  if(c.tipo_doc === "DNI" && !/^\d+$/.test(c.documento.trim())) return "El DNI tiene que ser sólo números.";
+  if(!emailValido(c.email)) return "Escribí un email válido.";
+  if(c.email.trim().toLowerCase() !== c.email2.trim().toLowerCase()) return "Los dos emails no coinciden.";
+  if(!c.telefono.trim()) return "Completá tu teléfono.";
+  return "";
+}
+function ckTicketsValido(){
+  if(!CK.asistentes.length) return "No hay entradas seleccionadas.";
+  for(let i = 0; i < CK.asistentes.length; i++){
+    const a = CK.asistentes[i];
+    if(!a.nombre.trim() || !a.apellido.trim()) return `Completá nombre y apellido de la entrada ${i+1}.`;
+    if(!a.documento.trim()) return `Completá el DNI de la entrada ${i+1}.`;
+    if(!/^\d+$/.test(a.documento.trim())) return `El DNI de la entrada ${i+1} tiene que ser sólo números.`;
+  }
+  return "";
+}
+const emailValido = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e||"").trim());
+
+/* ---------- Escritura en el estado (sin re-render, ver nota de arriba) ---------- */
+function ckCampo(campo, valor){
+  if(!CK) return;
+  CK.comprador[campo] = valor;
+  ckRefrescarValidacion();
+}
+function ckAsistente(i, campo, valor){
+  if(!CK || !CK.asistentes[i]) return;
+  CK.asistentes[i][campo] = valor;
+  ckRefrescarValidacion();
+}
+/* Actualiza sólo el cartel de error y el botón, para no perder el foco */
+function ckRefrescarValidacion(){
+  const msg = CK.paso === 2 ? ckCompradorValido() : CK.paso === 3 ? ckTicketsValido() : "";
+  const err = document.getElementById("ck-error");
+  // El error se muestra recién cuando el campo tiene algo escrito: que salte
+  // en rojo apenas abrís el formulario vacío es peor que no decir nada.
+  const empezoACargar = CK.paso === 2
+    ? Object.values(CK.comprador).some(v => (v||"").trim() && v !== "DNI" && v !== "+54")
+    : CK.asistentes.some(a => a.nombre || a.apellido || a.documento);
+  if(err){
+    err.textContent = (msg && empezoACargar) ? msg : "";
+    err.style.display = (msg && empezoACargar) ? "block" : "none";
+  }
+  const btn = document.getElementById("ck-siguiente");
+  if(btn) btn.disabled = msg !== "";
+}
+
+/* ---------- Cupones ----------
+   Todavía no hay sistema de descuentos: la tabla `cupones` existe y está
+   vacía a propósito (ver sql/checkout.sql), así que esto siempre responde
+   "código inválido". Cuando se carguen cupones, esto ya funciona. */
+function ckToggleCupon(){
+  CK.cuponAbierto = !CK.cuponAbierto;
+  renderCheckout();
+}
+async function ckAplicarCupon(){
+  const codigo = (CK.cuponTexto || "").trim().toUpperCase();
+  const msg = document.getElementById("ck-cupon-msg");
+  if(!codigo){
+    CK.cuponMsg = "Escribí un código."; CK.cuponOk = false;
+    if(msg){ msg.textContent = CK.cuponMsg; msg.className = "ck-error"; }
+    return;
+  }
+  if(msg){ msg.textContent = "Validando..."; msg.className = "ck-error"; }
+  let filas = [];
+  try{
+    filas = DEMO ? [] : await dbGet("cupones", `codigo=eq.${encodeURIComponent(codigo)}&select=*`);
+  }catch(e){ filas = []; }
+  CK.cuponOk = Array.isArray(filas) && filas.length > 0;
+  CK.cuponMsg = CK.cuponOk ? "Cupón aplicado." : "Ese código no es válido.";
+  if(msg){
+    msg.textContent = CK.cuponMsg;
+    msg.className = CK.cuponOk ? "ok" : "ck-error";
+    msg.style.display = "block";
+  }
+}
+
+/* ---------- Render ---------- */
+function renderCheckout(){
+  if(!CK) return;
+  ckSincronizarAsistentes();
+  renderCkStepper();
+  const cuerpo = document.getElementById("ck-cuerpo");
+  if(!cuerpo) return;
+  cuerpo.innerHTML =
+    CK.paso === 1 ? ckPaso1() :
+    CK.paso === 2 ? ckPaso2() :
+    CK.paso === 3 ? ckPaso3() : ckPaso4();
+  ckRefrescarValidacion();
+}
+
+function renderCkStepper(){
+  const ol = document.getElementById("ck-stepper");
+  if(!ol) return;
+  ol.innerHTML = CK_PASOS.map((titulo, i)=>{
+    const n = i + 1;
+    const clase = n === CK.paso ? "activo" : n < CK.paso ? "hecho" : "";
+    const dentro = n < CK.paso ? "✓" : n;
+    return `<li class="ck-step ${clase}">
+      <span class="ck-circulo">${dentro}</span>
+      <span class="ck-label">${esc(titulo)}</span>
+    </li>`;
+  }).join("");
+}
+
+/* PASO 1 — Revisá tu orden */
+function ckPaso1(){
+  const items = itemsSeleccionados();
+  const s = totalesSeleccion();
+  const tacho = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/><path d="M10 11v5M14 11v5"/></svg>`;
+  const mas = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>`;
+  const etiqueta = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V5.5A2.5 2.5 0 0 1 5.5 3H12l9 9-8.5 8.5z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>`;
+  const chevron = `<svg class="ck-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+
+  return `
+    ${items.map(({tipo, cantidad})=>`
+      <div class="ck-item">
+        <div class="ck-item-info">
+          <p class="ck-item-nombre">${esc(tipo.nombre)}</p>
+          <p class="ck-item-precio">${fmt(tipo.precio)} - Ticket</p>
+        </div>
+        <div class="ck-item-qty">
+          <button class="ck-icon-btn" onclick="ckQuitar(${tipo.id})" aria-label="Quitar una entrada de ${esc(tipo.nombre)}">${tacho}</button>
+          <b>${cantidad}</b>
+          <button class="ck-icon-btn" onclick="ckSumar(${tipo.id})" aria-label="Sumar una entrada de ${esc(tipo.nombre)}">${mas}</button>
+        </div>
+      </div>`).join("")}
+
+    <button class="ck-cupon-fila" onclick="ckToggleCupon()" aria-expanded="${CK.cuponAbierto}">
+      ${etiqueta}<span>¿Tenés un código de descuento?</span>${chevron}
+    </button>
+    ${CK.cuponAbierto ? `
+      <div class="ck-cupon-caja">
+        <input id="ck-cupon" placeholder="CÓDIGO" value="${esc(CK.cuponTexto)}"
+               oninput="CK.cuponTexto=this.value"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();ckAplicarCupon()}">
+        <button class="btn ghost" onclick="ckAplicarCupon()">Aplicar</button>
+      </div>
+      <p id="ck-cupon-msg" class="${CK.cuponOk ? "ok" : "ck-error"}" style="display:${CK.cuponMsg ? "block" : "none"};margin:-8px 0 16px">${esc(CK.cuponMsg)}</p>
+    ` : ""}
+
+    <div class="ck-resumen">
+      <div class="ck-linea"><span>Subtotal</span><b>${fmt(s.subtotal)}</b></div>
+      <div class="ck-linea"><span>Cargo por servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)</span><b>${fmt(s.servicio)}</b></div>
+      <div class="ck-linea ck-total"><span>Total</span><b>${fmt(s.total)}</b></div>
+    </div>
+
+    <div class="ck-pie ck-pie-solo">
+      <button class="btn" id="ck-siguiente" onclick="ckIr(2)">Siguiente</button>
+    </div>`;
+}
+function ckSumar(tipoId){
+  const t = (TIPOS[cur.id] || []).find(x=>x.id===tipoId);
+  if(!t) return;
+  const tope = Math.min(MAX_POR_TIPO, restantesTipo(t));
+  SELECCION[tipoId] = Math.min(tope, (Number(SELECCION[tipoId]) || 0) + 1);
+  actualizarResumenDetalle();
+  renderCheckout();
+}
+/* El tacho baja de a uno; al llegar a 0 el ítem desaparece de la lista.
+   Si se queda sin entradas, no tiene sentido seguir en el checkout. */
+function ckQuitar(tipoId){
+  SELECCION[tipoId] = Math.max(0, (Number(SELECCION[tipoId]) || 0) - 1);
+  if(!SELECCION[tipoId]) delete SELECCION[tipoId];
+  actualizarResumenDetalle();
+  if(!totalesSeleccion().entradas){ closeModal(); return; }
+  renderCheckout();
+}
+
+/* PASO 2 — Comprador */
+function ckPaso2(){
+  // Sin sesión y sin camino elegido: primero las dos puertas de entrada.
+  if(!CK.camino){
+    return `
+      <div class="ck-caminos">
+        <button class="ck-camino" onclick="ckCamino('invitado')">
+          <b>Continuar como invitado</b>
+          <span>Te mandamos las entradas por mail. No hace falta crear una cuenta.</span>
+        </button>
+        <button class="ck-camino" onclick="ckCamino('sesion')">
+          <b>Iniciar sesión</b>
+          <span>Con tu cuenta vas a poder ver tus entradas cuando quieras desde Mis Entradas.</span>
+        </button>
+      </div>
+      <div class="ck-pie">
+        <button class="btn ghost" onclick="ckIr(1)">Volver</button>
+      </div>`;
+  }
+
+  const c = CK.comprador;
+  const campo = (id, label, tipo, valor, extra="") => `
+    <div class="ck-campo">
+      <label for="ck-${id}">${label}</label>
+      <input id="ck-${id}" type="${tipo}" value="${esc(valor)}" ${extra}
+             oninput="ckCampo('${id}', this.value)">
+    </div>`;
+
+  return `
+    ${CK.camino === "invitado" ? `<p style="color:var(--text-dim);font-size:0.8125rem;margin-bottom:16px">Comprás como invitado. Te mandamos las entradas a este mail.</p>` : ""}
+    <div class="ck-campos">
+      ${campo("nombre", "Nombre", "text", c.nombre, 'autocomplete="given-name"')}
+      ${campo("apellido", "Apellido", "text", c.apellido, 'autocomplete="family-name"')}
+      <div class="ck-campo">
+        <label for="ck-tipo_doc">Tipo de documento</label>
+        <select id="ck-tipo_doc" onchange="ckCampo('tipo_doc', this.value)">
+          ${CK_TIPOS_DOC.map(t=>`<option value="${t}" ${c.tipo_doc===t?"selected":""}>${t}</option>`).join("")}
+        </select>
+      </div>
+      ${campo("documento", "Nro de documento", "text", c.documento, 'inputmode="numeric"')}
+      ${campo("email", "Email", "email", c.email, 'autocomplete="email"')}
+      ${campo("email2", "Confirmar email", "email", c.email2, 'onpaste="return false"')}
+      <div class="ck-campo">
+        <label for="ck-telefono">Teléfono</label>
+        <div class="ck-tel">
+          <select id="ck-pais" onchange="ckCampo('pais', this.value)" aria-label="Código de país">
+            ${CK_PAISES.map(p=>`<option value="${p.cod}" ${c.pais===p.cod?"selected":""}>${p.bandera} ${p.cod}</option>`).join("")}
+          </select>
+          <input id="ck-telefono" type="tel" inputmode="tel" value="${esc(c.telefono)}"
+                 oninput="ckCampo('telefono', this.value)" autocomplete="tel">
+        </div>
+      </div>
+    </div>
+    <p class="ck-error" id="ck-error" style="display:none"></p>
+    <div class="ck-pie">
+      <button class="btn ghost" onclick="ckIr(1)">Volver</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(3)">Siguiente</button>
+    </div>`;
+}
+function ckCamino(cual){
+  // "Iniciar sesión" sin sesión activa manda a /cuenta y vuelve al evento
+  if(cual === "sesion" && !USER && !DEMO){
+    try{ localStorage.setItem("tp_volver", "/?evento=" + cur.id); }catch(e){}
+    go("cuenta");
+    return;
+  }
+  CK.camino = cual;
+  renderCheckout();
+}
+
+/* PASO 3 — Tickets */
+function ckPaso3(){
+  return `
+    ${CK.asistentes.map((a, i)=>{
+      // "GENERAL 1 - Entrada 2 de 3" cuenta dentro del mismo tipo, no sobre
+      // el total: si comprás 2 de un tipo y 1 de otro, cada bloque se numera
+      // contra los suyos, que es lo que el comprador espera leer.
+      const delTipo = CK.asistentes.filter(x=>x.tipo_ticket_id === a.tipo_ticket_id);
+      const nro = delTipo.indexOf(a) + 1;
+      return `
+      <div class="ck-ticket">
+        <h4 class="ck-ticket-titulo">${esc(a.tipo)} - Entrada ${nro} de ${delTipo.length}</h4>
+        ${i === 0 ? `
+          <label class="ck-check">
+            <input type="checkbox" ${CK.usarMisDatos ? "checked" : ""} onchange="ckUsarMisDatos(this.checked)">
+            <span>Usar mis datos</span>
+          </label>` : ""}
+        <div class="ck-campos">
+          <div class="ck-campo">
+            <label for="ck-a${i}-nombre">Nombre</label>
+            <input id="ck-a${i}-nombre" value="${esc(a.nombre)}" oninput="ckAsistente(${i},'nombre',this.value)">
+          </div>
+          <div class="ck-campo">
+            <label for="ck-a${i}-apellido">Apellido</label>
+            <input id="ck-a${i}-apellido" value="${esc(a.apellido)}" oninput="ckAsistente(${i},'apellido',this.value)">
+          </div>
+          <div class="ck-campo">
+            <label for="ck-a${i}-doc">DNI</label>
+            <input id="ck-a${i}-doc" inputmode="numeric" value="${esc(a.documento)}" oninput="ckAsistente(${i},'documento',this.value)">
+          </div>
         </div>
       </div>`;
-    box.appendChild(row);
-  });
+    }).join("")}
+    <p class="ck-error" id="ck-error" style="display:none"></p>
+    <div class="ck-pie">
+      <button class="btn ghost" onclick="ckIr(2)">Volver</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(4)">Siguiente</button>
+    </div>`;
 }
-function updTotal(){
-  const s = totalesSeleccion();
-  document.getElementById("sub-label").textContent = `Entradas (${s.entradas})`;
-  document.getElementById("subtotal").textContent = fmt(s.subtotal);
-  // El porcentaje sale de la constante para que no se desincronice del cálculo
-  const svcLabel = document.getElementById("serv-label");
-  if(svcLabel) svcLabel.textContent = `Costo de servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)`;
-  document.getElementById("serv-total").textContent = fmt(s.servicio);
-  document.getElementById("total-label").textContent = "Total";
-  document.getElementById("total").textContent = fmt(s.total);
+function ckUsarMisDatos(tildado){
+  CK.usarMisDatos = tildado;
+  if(tildado && CK.asistentes[0]){
+    CK.asistentes[0].nombre    = CK.comprador.nombre;
+    CK.asistentes[0].apellido  = CK.comprador.apellido;
+    CK.asistentes[0].documento = CK.comprador.documento;
+  }
+  renderCheckout();
 }
-async function confirmBuy(){
-  const errEl = document.getElementById("buy-err");
-  const unidades = unidadesSeleccionadas();
-  const rows = [...document.querySelectorAll("#attendees .attendee-row")];
-  const asistentes = rows.map((r,i)=>{
-    const tipo = unidades[i];
-    return {
-      nombre: r.querySelector(".a-nombre").value.trim(),
-      apellido: r.querySelector(".a-apellido").value.trim(),
-      tipo_ticket_id: tipo.id,
-      tipo: tipo.nombre,
-      accesos: Number(tipo.accesos) || 1,
-      precio: Number(tipo.precio) || 0,
-      servicio: servicioDe(tipo.precio)
-    };
-  });
-  const email = document.getElementById("f-email").value.trim();
-  if(!asistentes.length){
-    errEl.textContent="Elegí al menos una entrada"; errEl.style.display="block"; return;
-  }
-  if(asistentes.some(a=>!a.nombre || !a.apellido)){
-    errEl.textContent="Completá nombre y apellido de cada entrada"; errEl.style.display="block"; return;
-  }
-  if(!email || !email.includes("@")){
-    errEl.textContent="Completá un email válido para recibir las entradas"; errEl.style.display="block"; return;
-  }
-  errEl.style.display="none";
 
-  const btn = document.getElementById("btn-confirm");
-  btn.disabled=true; btn.textContent="Redirigiendo al pago...";
+/* PASO 4 — Confirmación (sólo lectura) */
+function ckPaso4(){
+  const c = CK.comprador;
   const s = totalesSeleccion();
+  return `
+    <div class="ck-repaso">
+      <h4>${esc(cur.nombre)}</h4>
+      <div class="ck-dato"><span>Cuándo</span><b>${esc([cur.fecha_texto, cur.puertas].filter(Boolean).join(" · ") || "-")}</b></div>
+      <div class="ck-dato"><span>Dónde</span><b>${esc(cur.lugar || "-")}</b></div>
+    </div>
+
+    <div class="ck-repaso">
+      <h4>Entradas</h4>
+      ${itemsSeleccionados().map(({tipo, cantidad})=>`
+        <div class="ck-dato"><span>${cantidad}× ${esc(tipo.nombre)}</span><b>${fmt((Number(tipo.precio)||0)*cantidad)}</b></div>`).join("")}
+      ${CK.asistentes.map((a,i)=>`
+        <div class="ck-dato"><span>Entrada ${i+1}</span><b>${esc(a.nombre)} ${esc(a.apellido)} · ${esc(a.documento)}</b></div>`).join("")}
+    </div>
+
+    <div class="ck-repaso">
+      <h4>Comprador</h4>
+      <div class="ck-dato"><span>Nombre</span><b>${esc(c.nombre)} ${esc(c.apellido)}</b></div>
+      <div class="ck-dato"><span>${esc(c.tipo_doc)}</span><b>${esc(c.documento)}</b></div>
+      <div class="ck-dato"><span>Email</span><b>${esc(c.email)}</b></div>
+      <div class="ck-dato"><span>Teléfono</span><b>${esc(c.pais)} ${esc(c.telefono)}</b></div>
+    </div>
+
+    <div class="ck-resumen">
+      <div class="ck-linea"><span>Subtotal</span><b>${fmt(s.subtotal)}</b></div>
+      <div class="ck-linea"><span>Cargo por servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)</span><b>${fmt(s.servicio)}</b></div>
+      <div class="ck-linea ck-total"><span>Total</span><b>${fmt(s.total)}</b></div>
+    </div>
+
+    <p class="ck-error" id="ck-error" style="display:none"></p>
+    <div class="ck-pie">
+      <button class="btn ghost" onclick="ckIr(3)">Volver</button>
+      <button class="btn" id="ck-pagar" onclick="ckPagar()">Pagar</button>
+    </div>`;
+}
+
+/* ---------- Pago ----------
+   El total que se manda ya incluye el cargo por servicio. La compra de un
+   invitado va sin user_id: no se le crea cuenta a nadie, el QR le llega por
+   mail igual (lo manda el backend, ver nota del contrato abajo). */
+async function ckPagar(){
+  const err = document.getElementById("ck-error");
+  const btn = document.getElementById("ck-pagar");
+  const mostrarError = txt => { if(err){ err.textContent = txt; err.style.display = "block"; } };
+
+  const problema = ckCompradorValido() || ckTicketsValido();
+  if(problema){ mostrarError(problema); return; }
+
+  const c = CK.comprador;
+  const s = totalesSeleccion();
+  const asistentes = CK.asistentes.map(a=>({
+    nombre: a.nombre.trim(), apellido: a.apellido.trim(), documento: a.documento.trim(),
+    tipo_ticket_id: a.tipo_ticket_id, tipo: a.tipo, accesos: a.accesos,
+    precio: a.precio, servicio: a.servicio
+  }));
+  const comprador = {
+    nombre: c.nombre.trim(), apellido: c.apellido.trim(),
+    tipo_doc: c.tipo_doc, documento: c.documento.trim(),
+    email: c.email.trim(), telefono: (c.pais + " " + c.telefono.trim()).trim(),
+    user_id: USER ? (USER.id || null) : null
+  };
+
+  btn.disabled = true; btn.textContent = "Redirigiendo al pago...";
 
   // MODO DEMO: sin Supabase, simula la compra sin pago real
   if(DEMO){
     const grupo = "BX-" + Math.random().toString(36).slice(2,8).toUpperCase();
     const entradas = asistentes.map((a,i)=>({
-      nombre:a.nombre, apellido:a.apellido, email, evento:cur.nombre, evento_id:cur.id,
-      fecha_texto:cur.fecha_texto, lugar:cur.lugar,
+      nombre:a.nombre, apellido:a.apellido, documento:a.documento, email:comprador.email,
+      evento:cur.nombre, evento_id:cur.id, fecha_texto:cur.fecha_texto, lugar:cur.lugar,
       tipo:a.tipo, tipo_ticket_id:a.tipo_ticket_id, accesos:a.accesos,
       grupo, total:a.precio + a.servicio, codigo:grupo+"-"+(i+1), estado:"aprobado"
     }));
@@ -715,28 +1082,30 @@ async function confirmBuy(){
     setTimeout(pintarQRs, 50);
     document.getElementById("modal-buy").style.display="none";
     document.getElementById("modal-done").style.display="block";
-    btn.disabled=false; btn.textContent="Pagar con Mercado Pago";
+    btn.disabled=false; btn.textContent="Pagar";
     return;
   }
 
   /* REAL: la Edge Function crear-pago arma la preferencia de Mercado Pago y
-     crea una fila en compras por asistente (con service_role, por eso el
-     navegador no inserta nada). Contrato que espera recibir:
+     crea una fila en compras por asistente (con service_role). Contrato:
        { evento, evento_id, fecha_texto, lugar, email,
+         comprador: {nombre, apellido, tipo_doc, documento, email, telefono, user_id},
          items: [{tipo_ticket_id, nombre, precio, servicio, cantidad}],
-         asistentes: [{nombre, apellido, tipo_ticket_id, tipo, accesos, precio, servicio}],
-         total }
-     El precio de cada entrada es precio + servicio. */
+         asistentes: [{nombre, apellido, documento, tipo_ticket_id, tipo, accesos, precio, servicio}],
+         cupon, total }
+     El precio de cada entrada es precio + servicio; `total` ya viene sumado.
+     comprador.user_id es null cuando compró un invitado. */
   try{
     const r = await fetch(`${SUPABASE_URL}/functions/v1/crear-pago`, {
       method:"POST",
-      headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+SUPABASE_KEY, "Content-Type":"application/json" },
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+(USER ? USER.token : SUPABASE_KEY), "Content-Type":"application/json" },
       body: JSON.stringify({
         evento: cur.nombre,
         evento_id: cur.id,
         fecha_texto: cur.fecha_texto,
         lugar: cur.lugar,
-        email: email,
+        email: comprador.email,
+        comprador,
         items: itemsSeleccionados().map(({tipo, cantidad})=>({
           tipo_ticket_id: tipo.id,
           nombre: tipo.nombre,
@@ -744,21 +1113,20 @@ async function confirmBuy(){
           servicio: servicioDe(tipo.precio),
           cantidad
         })),
-        asistentes: asistentes,
+        asistentes,
+        cupon: CK.cuponOk ? (CK.cuponTexto || "").trim().toUpperCase() : null,
         total: s.total
       })
     });
     const data = await r.json();
     if(!r.ok || !data.init_point){
-      errEl.textContent = "No se pudo iniciar el pago. Probá de nuevo."; errEl.style.display="block";
-      btn.disabled=false; btn.textContent="Pagar con Mercado Pago"; return;
+      mostrarError("No se pudo iniciar el pago. Probá de nuevo.");
+      btn.disabled=false; btn.textContent="Pagar"; return;
     }
-    // Guardar el grupo para recuperar la entrada al volver del pago
-    // Ir a Mercado Pago
     window.location.href = data.init_point;
   }catch(e){
-    errEl.textContent = "Error de conexión con el pago. Probá de nuevo."; errEl.style.display="block";
-    btn.disabled=false; btn.textContent="Pagar con Mercado Pago";
+    mostrarError("Error de conexión con el pago. Probá de nuevo.");
+    btn.disabled=false; btn.textContent="Pagar";
   }
 }
 function closeModal(){ const o=document.getElementById("overlay"); if(o) o.classList.remove("open"); }
@@ -881,6 +1249,50 @@ function updBadge(){
   if(!b) return;
   b.textContent = MY_TICKETS.length;
   b.style.display = MY_TICKETS.length ? "inline-block" : "none";
+}
+
+/* ---------- RECUPERAR ENTRADAS POR EMAIL ----------
+   Para el que compró como invitado: no tiene sesión, así que no hay forma de
+   listarle las entradas en pantalla sin verificar que ese mail es suyo. Por
+   eso esto NO muestra nada acá — le pide al backend que las reenvíe a esa
+   casilla, y la casilla es la verificación.
+
+   Además la respuesta es siempre la misma, exista o no ese mail en la base:
+   si dijera "no encontramos entradas" cualquiera podría usar el formulario
+   para averiguar quién compró. */
+async function recuperarEntradas(){
+  const input = document.getElementById("rec-email");
+  const ok = document.getElementById("rec-ok"), err = document.getElementById("rec-err");
+  const btn = document.getElementById("rec-btn");
+  if(!input) return;
+  ok.style.display = "none"; err.style.display = "none";
+
+  const email = input.value.trim();
+  if(!emailValido(email)){
+    err.textContent = "Escribí un email válido."; err.style.display = "block"; return;
+  }
+  const mensajeNeutro = "Si hay entradas compradas con ese email, te las reenviamos ahí. Revisá también el correo no deseado.";
+
+  if(DEMO){
+    ok.textContent = mensajeNeutro; ok.style.display = "block"; input.value = ""; return;
+  }
+
+  btn.disabled = true; btn.textContent = "Enviando...";
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/reenviar-entradas`, {
+      method:"POST",
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+SUPABASE_KEY, "Content-Type":"application/json" },
+      body: JSON.stringify({ email })
+    });
+    if(!r.ok) throw new Error("falló el reenvío");
+    ok.textContent = mensajeNeutro; ok.style.display = "block";
+    input.value = "";
+  }catch(e){
+    err.textContent = "No se pudo enviar ahora. Probá de nuevo en un rato.";
+    err.style.display = "block";
+  }finally{
+    btn.disabled = false; btn.textContent = "Reenviar entradas";
+  }
 }
 
 /* Cuando el usuario vuelve de Mercado Pago, revisar si el pago se aprobó */
@@ -2341,6 +2753,9 @@ function setUserFromInfo(info, token){
   const m = info.user_metadata || {};
   USER = {
     token: token,
+    // El id de auth.users viaja en la compra como compras.user_id (null si
+    // compró un invitado), ver ckPagar()
+    id: info.id || null,
     email: info.email,
     nombre: m.nombre || (m.full_name ? m.full_name.split(" ")[0] : ""),
     apellido: m.apellido || (m.full_name ? m.full_name.split(" ").slice(1).join(" ") : ""),

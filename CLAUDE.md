@@ -24,9 +24,9 @@ What's **not** done yet:
 - **Hidden tickets.** `tipos_ticket.oculto` / `codigo_acceso` exist and the RLS policy hides them from the public, but there's no unlock UI and no way to fetch them — that needs an RPC (see `sql/README.md`).
 - **Combos with a bottle voucher.** `accesos` is stored on the type and copied to each `compras` row, but a combo of 5 accesses still emits **one** QR per unit purchased, not 5 + a voucher. `BRONX-SPEC.md` §9 decides the target; the scanner side is step 8 of the plan.
 - Minimum age, "duplicate event" for the weekly recurring shows — `BRONX-SPEC.md` §4.
-- The 4-step FlashPass-style checkout (DNI per attendee, order number, deferred delivery) — `BRONX-SPEC.md` §10. Current checkout is still a single modal, now fed by the multi-type selection.
+- **Deferred delivery** of the tickets (X hours before the event) — `BRONX-SPEC.md` §10. The rest of that section (4-step checkout, DNI per attendee, order number) is done, see "Checkout de 4 pasos" below.
+- **The `reenviar-entradas` Edge Function.** "Mis Entradas" has a "¿Compraste sin cuenta?" box that POSTs an email to `${SUPABASE_URL}/functions/v1/reenviar-entradas` so the tickets get re-sent there. The UI, its validation and its neutral-answer behaviour are done and tested; **the function itself does not exist yet**, so today that call always fails and the box shows its error message. Like `crear-pago`, it lives outside this repo.
 - No GitHub-to-Cloudflare deploy or Mercado Pago credentials for Bronx yet (`BRONX-SPEC.md` §6). `MP_ACCESS_TOKEN` must be Bronx's so the money lands in their account.
-- Service fee is still `SERVICIO_PCT = 0.08`; Bronx's commercial target is 10% (`BRONX-SPEC.md` §8).
 
 ## Running locally
 
@@ -109,7 +109,8 @@ Event detail deep-links via `?evento=<id>`, restored on load and on `popstate` i
 Tables (defined in `sql/01-tablas.sql`, policies in `sql/02-rls.sql`):
 - `eventos` — events. Flags: `activo`, `pasado`, `agotado`, `ubicacion_secreta`. `color_acento` is the event's accent-color key (see "Per-event accent color"). **No price columns** — pricing lives entirely in `tipos_ticket`.
 - `tipos_ticket` — the ticket types of an event, all on sale simultaneously: `evento_id`, `nombre`, `descripcion`, `precio`, `cantidad` (cupo, null = sin límite), `orden`, `categoria` (`ticket`|`combo`), `accesos`, `activo`, `oculto`, `codigo_acceso`, `valido_desde`, `valido_hasta`.
-- `compras` — purchases/tickets, one row per QR. `grupo` (order number, groups the rows of one checkout), `evento`/`evento_id`, `tipo`/`tipo_ticket_id`, `accesos`, `nombre`, `apellido`, `email`, `total` (what that one ticket cost, service fee included), `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`. Names *and* ids are stored so a ticket stays readable after its event or type is deleted.
+- `compras` — purchases/tickets, one row per QR. `grupo` (order number, groups the rows of one checkout), `evento`/`evento_id`, `tipo`/`tipo_ticket_id`, `accesos`, `nombre`, `apellido`, `documento` (the attendee's DNI), `email`, `total` (what that one ticket cost, service fee included), `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`. Buyer data repeats on every row of the order (`comprador_nombre`, `comprador_apellido`, `comprador_tipo_doc`, `comprador_documento`, `comprador_telefono`), and `user_id` is the buyer's `auth.users` id — **null when someone bought as a guest**. Names *and* ids are stored so a ticket stays readable after its event or type is deleted.
+- `cupones` — discount codes. **Deliberately empty**: there's no discount system yet, but the checkout's "¿Tenés un código de descuento?" input already queries this table (and therefore always answers "código inválido"). Filling rows in is all it takes to turn it on; the front end doesn't change.
 - `galeria` — photos/videos attached to a past event (`evento_id`, `tipo`: `foto`|`video`, `url`, `orden`). The table and its RLS policies stay; nothing in the app reads or writes it right now — see "Current status".
 - `perfiles` — user profile mirror (name/surname/phone), filled by an `auth.users` trigger, read by the admin panel's "Usuarios registrados" table.
 - `staff` — emails with scanner/admin-panel access (see Roles).
@@ -174,10 +175,23 @@ The derived helpers are the ones to reuse — don't recompute this inline:
 
 **Selection and checkout.** `SELECCION` is `{tipo_ticket_id: cantidad}`, picked on the event detail page (`renderTiposDetalle` groups by `categoria` into TICKETS and COMBOS). `chTipo()` clamps to `min(MAX_POR_TIPO, restantesTipo)`. From there:
 - `itemsSeleccionados()` → `[{tipo, cantidad}]`, one per chosen type.
-- `unidadesSeleccionadas()` → one entry per QR to emit, in the same order the modal renders attendee rows and `confirmBuy()` reads them back. **These two orders must stay in sync** — both derive from `tiposALaVenta(cur)`, so don't sort one of them independently.
+- `unidadesSeleccionadas()` → one entry per QR to emit, in the same order the checkout renders attendee blocks and `ckPagar()` reads them back. **These two orders must stay in sync** — both derive from `tiposALaVenta(cur)`, so don't sort one of them independently.
 - `totalesSeleccion()` → `{entradas, subtotal, servicio, total}`.
 
-A service fee (`SERVICIO_PCT`, currently 8% — Bronx's commercial target is 10%, see `BRONX-SPEC.md` §8) is added per ticket via `servicioDe(precio)`. The percentage shown in the UI is rendered from that same constant — don't hardcode it in the HTML.
+A service fee (`SERVICIO_PCT`, **10%**) is added per ticket via `servicioDe(precio)`; the buyer pays it on top of the subtotal. That constant is the single source of truth — the percentages shown in the UI are rendered from it, so never hardcode "10%" in the HTML or in a template string.
+
+### Checkout de 4 pasos
+
+`index.html` only holds the modal's shell (`#modal-buy` → title, `#ck-stepper`, `#ck-cuerpo`); every step is drawn by `renderCheckout()` in `js/app.js`. The steps are **1 Revisá tu orden · 2 Comprador · 3 Tickets · 4 Confirmación**, and the whole thing is one column — mobile is the reference layout, since that's where nearly all the buying happens.
+
+- **State lives in `CK`** (`ckNuevo()` builds it; `null` means the modal is closed): current step, which path was chosen when there's no session, the buyer's fields, one entry per attendee, and the coupon box. `abrirCheckout(id)` replaced the old `openBuy()`.
+- **`ckSincronizarAsistentes()`** keeps `CK.asistentes` aligned with `unidadesSeleccionadas()` by position, so changing quantities in step 1 doesn't wipe data already typed in step 3.
+- **Inputs write to `CK` via `oninput` and never re-render** — same rule as the admin's ticket-type editor: redrawing on every keystroke drops focus mid-word. Only structural changes re-render (changing step, +/− on an item, ticking "Usar mis datos"). What *does* update live is the inline error and the disabled state of "Siguiente", both patched by id in `ckRefrescarValidacion()`.
+- **Validation** is `ckCompradorValido()` / `ckTicketsValido()`, which return `""` when valid or the message to show. The error only appears once the user has typed something — a form that turns red the instant you open it is worse than silence.
+- **No session required to buy.** Step 2 offers "Continuar como invitado" or "Iniciar sesión"; a guest's purchase is stored with `compras.user_id = null` and **no account is created for them**. Logged in, the form comes prefilled and the path chooser is skipped.
+- **Guests can't see their tickets in a list** (there's no session to scope them to), so "Mis Entradas" has a "¿Compraste sin cuenta?" box that asks the backend to re-send them to that address. It deliberately answers the *same* thing whether or not the email exists — otherwise the form doubles as a way to find out who bought.
+
+**RLS note.** `sql/checkout.sql` lets `anon` INSERT into `compras`, but the `with check` pins it to `estado = 'pendiente' and usada = false`, so nobody can self-issue a ticket the scanner would accept. There's still no SELECT policy for `anon` — a guest can buy but cannot read a single row, theirs included. That's why an anon insert must be sent with `Prefer: return=minimal` (asking for the row back would need SELECT).
 
 **Admin editor.** `TIPOS_FORM` is an editable copy of the event's types; `TIPOS_BORRADOS` holds ids to delete. Nothing touches the database until "Guardar evento": `saveEvento()` writes the event first (a new one needs its id), then `sincronizarTipos(eventoId)` deletes, updates and inserts. The inputs write straight into `TIPOS_FORM` via `setTipoCampo()` and only add/move/delete re-render — re-rendering on every keystroke would drop focus mid-word.
 
