@@ -66,16 +66,9 @@
     <button class="back volver-panel" style="padding:0 0 16px" onclick="stopScanner();go('admin')">← Volver al panel</button>
     <h2>Puerta</h2>
 
-    <div class="esc-tabs">
-      <button class="esc-tab active" id="et-escaner" onclick="vistaPuerta('escaner')">Escáner</button>
-      <button class="esc-tab" id="et-vendidas" onclick="vistaPuerta('vendidas')">Vendidas</button>
-    </div>
-
-    <div id="vista-escaner">
     <p class="sub" style="margin-bottom:20px">Apuntá al QR de cada entrada. Verde = pasa, rojo = no pasa.</p>
 
     <div class="puerta-box">
-      <div class="puerta-estado" id="puerta-estado">Cargando...</div>
       <div class="puerta-btns">
         <button class="btn ghost btn-mini" id="puerta-bajar" onclick="descargarLista()">Descargar lista</button>
         <button class="btn btn-mini" id="puerta-sync" onclick="sincronizarPuerta()" style="display:none">Subir ingresos</button>
@@ -96,19 +89,6 @@
       <button class="salir-app" onclick="salirEscaner()">Salir</button>
     </div>
     <div id="scan-list"></div>
-    </div>
-
-    <!-- ============ VENDIDAS ============ -->
-    <div id="vista-vendidas" style="display:none">
-      <p class="sub" style="margin-bottom:16px">Todas las entradas pagadas y quién las compró. Verde = ya entró.</p>
-      <input type="text" id="vend-filtro" placeholder="Buscar por nombre, evento o código..." oninput="dibujarVendidas()">
-      <div class="vend-resumen" id="vend-resumen"></div>
-      <div id="vend-list"></div>
-      <div class="scan-list-head" style="margin-top:20px;border-bottom:none;border-top:1px solid var(--border);padding-top:12px">
-        <button class="btn ghost btn-mini" onclick="cargarVendidas()">Actualizar</button>
-        <button class="salir-app" onclick="salirEscaner()">Salir</button>
-      </div>
-    </div>
     </div>
   </section>
 </div>

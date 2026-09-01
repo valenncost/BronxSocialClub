@@ -11,6 +11,7 @@ desde el SQL Editor:
 | 4 | `04-storage.sql` | El bucket `fotos` (portadas de eventos y galería) y sus permisos |
 | 5 | `roles-equipo.sql` | Roles del equipo: tablas `colaboradores` y `colaborador_rol` + las policies de cada rol. **Redefine `es_admin()` y `es_staff()`** de `02-rls.sql`, así que va siempre después |
 | 6 | `evento-vistas.sql` | Tabla `evento_vistas` (visitas a la página de cada evento) para el KPI "Vistas" y el gráfico de Analytics del Studio. Usa `es_encargado()`, así que va después de `roles-equipo.sql` |
+| 7 | `cortesias.sql` | Columna `compras.origen` (`venta`/`cortesia`) + la policy que deja al organizador y a los encargados emitir entradas de invitación desde el Studio. También usa `es_encargado()` |
 
 Se pueden correr de nuevo sin romper nada: todo es `create ... if not exists` /
 `create or replace` / `drop policy if exists`.
@@ -52,11 +53,16 @@ Desde `roles-equipo.sql` el acceso al Studio sale de dos tablas:
 - `colaborador_rol` — qué rol tiene y sobre qué evento. `evento_id` en NULL
   significa **todos los eventos**; con un id, ese rol vale sólo para ese evento.
 
-| Rol | Puede |
-|---|---|
-| `admin` | Todo el Studio, incluida la pantalla de Equipo y la configuración |
-| `encargado` | Ver y editar eventos (los de su alcance) + compradores y analytics. No gestiona roles ni configuración sensible |
-| `escaner` | Sólo escanear QR en la puerta (leer `compras` y marcarlas usadas) |
+| Rol (valor guardado) | Se muestra como | Puede |
+|---|---|---|
+| `admin` | **Organizador** | Todo el Studio, incluida la pantalla de Equipo y la configuración |
+| `encargado` | Encargado | Ver y editar eventos (los de su alcance) + compradores y analytics, y emitir cortesías. No gestiona roles ni configuración sensible |
+| `escaner` | Escáner | Sólo escanear QR en la puerta (leer `compras` y marcarlas usadas) |
+
+⚠️ El rol `admin` **se llama "Organizador" en la interfaz** pero el valor guardado
+sigue siendo `admin`: renombrarlo obligaría a migrar `colaborador_rol`, su check
+constraint y `es_admin()` sin ganar nada. El nombre visible vive en un solo lugar,
+`ROLES[x].titulo` de `js/app.js`.
 
 La tabla vieja `staff` **queda en la base pero ya no la lee nadie**: sus emails se
 migran a `colaboradores` con rol `escaner` global la primera vez que se corre

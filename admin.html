@@ -57,6 +57,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/><path d="M8 13h8M8 16.5h5"/></svg>
           <span>Compradores</span>
         </button>
+        <button class="dash-nav-item" id="nav-cortesias" onclick="mostrarSeccionAdmin('cortesias')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+          <span>Cortesías</span>
+        </button>
         <button class="dash-nav-item" id="nav-usuarios" onclick="mostrarSeccionAdmin('usuarios')">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.2a3.5 3.5 0 0 1 0 5.6M18 20a6.6 6.6 0 0 0-2-4.7"/></svg>
           <span>Usuarios</span>
@@ -145,6 +149,7 @@
             <!-- ANALYTICS -->
             <div id="ev-pane-analytics">
               <div class="kpis" id="ev-kpis"></div>
+              <p class="ev-cortesias-nota" id="ev-cortesias-nota" style="display:none"></p>
 
               <div class="dash-card" style="margin-bottom:20px">
                 <div class="ev-an-head">
@@ -329,11 +334,51 @@
           </div>
         </div>
 
+        <!-- ---------- CORTESÍAS ---------- -->
+        <div class="admin-section" id="sec-cortesias">
+          <h3>Enviar cortesía</h3>
+          <p style="color:var(--text-dim);font-size:14px;margin-bottom:20px">Genera una entrada válida y la manda por mail, sin pasar por Mercado Pago. Sirve igual que una comprada en la puerta, pero no cuenta como venta en la facturación.</p>
+
+          <div class="dash-card cortesia-form">
+            <p class="err" id="cor-err"></p>
+            <div class="form-grid">
+              <div class="full">
+                <label for="cor-evento">Evento</label>
+                <select id="cor-evento" onchange="corCambiarEvento()"></select>
+              </div>
+              <div class="full">
+                <label for="cor-tipo">Tipo de entrada</label>
+                <select id="cor-tipo"></select>
+              </div>
+              <div><label for="cor-nombre">Nombre del invitado (opcional)</label><input id="cor-nombre" placeholder="Nombre"></div>
+              <div><label for="cor-apellido">Apellido (opcional)</label><input id="cor-apellido" placeholder="Apellido"></div>
+              <div class="full">
+                <label for="cor-email">Email de destino</label>
+                <input id="cor-email" type="email" placeholder="invitado@mail.com" autocomplete="off"
+                       onkeydown="if(event.key==='Enter')enviarCortesia()">
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+              <button class="btn" id="cor-btn" onclick="enviarCortesia()">Generar y enviar</button>
+              <button class="btn ghost" onclick="resetCortesiaForm()">Limpiar</button>
+            </div>
+          </div>
+
+          <div id="cor-resultado"></div>
+        </div>
+
         <!-- ---------- USUARIOS ---------- -->
         <div class="admin-section" id="sec-usuarios">
           <h3>Usuarios registrados</h3>
           <div class="admin-bar">
             <input type="text" id="filtro-usuarios" placeholder="Buscar usuario..." oninput="drawUsuarios()">
+            <select id="filtro-usuarios-rol" onchange="drawUsuarios()">
+              <option value="">Todos los roles</option>
+              <option value="admin">Organizador</option>
+              <option value="encargado">Encargado</option>
+              <option value="escaner">Escáner</option>
+              <option value="sinrol">Sin rol asignado</option>
+            </select>
             <div style="display:flex;gap:10px">
               <button class="btn ghost" onclick="loadUsuarios()">Actualizar</button>
               <button class="btn ghost" onclick="exportUsuariosCSV()">Descargar CSV</button>
@@ -342,7 +387,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>#</th><th>Registrado</th><th>Nombre</th><th>Apellido</th><th>Teléfono</th><th>Email</th><th>Escáner</th>
+                <th>#</th><th>Registrado</th><th>Nombre</th><th>Apellido</th><th>Teléfono</th><th>Email</th><th>Rol</th>
               </tr></thead>
               <tbody id="tbody-usuarios"></tbody>
             </table>

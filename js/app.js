@@ -933,6 +933,13 @@ function renderCheckout(){
     clave === "comprador" ? ckPaso2() :
     clave === "tickets"   ? ckPaso3() :
     clave === "datos"     ? ckPasoDatos() : ckPaso4();
+  // Fade + slide sutil en cada cambio de paso (ver "ANIMACIONES SUAVES" del
+  // pedido). Sacar y volver a poner la clase fuerza un reflow entre medio:
+  // sin eso, la animación de la clase CSS sólo correría la primera vez que
+  // #ck-cuerpo se crea, no en cada innerHTML nuevo.
+  cuerpo.classList.remove("ck-paso-anim");
+  void cuerpo.offsetWidth;
+  cuerpo.classList.add("ck-paso-anim");
   ckRefrescarValidacion();
 }
 
@@ -1181,7 +1188,7 @@ function ckPaso4(){
     <p class="ck-error" id="ck-error" style="display:none"></p>
     <div class="ck-pie ck-pie-confirmar">
       <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
-      <button class="btn ancho" id="ck-pagar" onclick="ckPagar()" ${CK.terminosAceptados ? "" : "disabled"}>Confirmar</button>
+      <button class="btn ancho" id="ck-pagar" onclick="ckPagar()" ${CK.terminosAceptados ? "" : "disabled"}>Confirmar y Pagar</button>
     </div>`;
 }
 function ckToggleTerminos(tildado){
@@ -1234,7 +1241,7 @@ async function ckPagar(){
     setTimeout(pintarQRs, 50);
     document.getElementById("modal-buy").style.display="none";
     document.getElementById("modal-done").style.display="block";
-    btn.disabled=false; btn.textContent="Confirmar";
+    btn.disabled=false; btn.textContent="Confirmar y Pagar";
     return;
   }
 
@@ -1273,12 +1280,12 @@ async function ckPagar(){
     const data = await r.json();
     if(!r.ok || !data.init_point){
       mostrarError("No se pudo iniciar el pago. Probá de nuevo.");
-      btn.disabled=false; btn.textContent="Confirmar"; return;
+      btn.disabled=false; btn.textContent="Confirmar y Pagar"; return;
     }
     window.location.href = data.init_point;
   }catch(e){
     mostrarError("Error de conexión con el pago. Probá de nuevo.");
-    btn.disabled=false; btn.textContent="Confirmar";
+    btn.disabled=false; btn.textContent="Confirmar y Pagar";
   }
 }
 // CK ya se reemplaza entero en abrirCheckout() (CK = ckNuevo()), así que un
@@ -1495,18 +1502,27 @@ let logged = false;
    evento_id null = todos los eventos). Los 3 roles, de mayor a menor:
 
      admin      todo el Studio, incluida esta pantalla de Equipo.
-     encargado  ve y edita eventos, ve compradores y analytics. No gestiona
-                roles ni configuración sensible (Mercado Pago, Resend…).
+     encargado  ve y edita eventos, ve compradores y analytics, manda
+                cortesías. No gestiona roles ni configuración sensible
+                (Mercado Pago, Resend…).
      escaner    sólo la pantalla de escaneo de QR, nada más del Studio.
+
+   ⚠️ El rol "admin" se MUESTRA como "Organizador" en toda la interfaz, pero
+   la clave guardada sigue siendo 'admin'. Es a propósito: renombrar el valor
+   obligaría a migrar colaborador_rol, su check constraint y es_admin() sin
+   ganar nada. El único lugar donde vive el nombre visible es ROLES[x].titulo
+   — si alguna vez hay que volver a cambiarlo, se cambia acá y listo.
 
    Esto es gating de interfaz: lo que de verdad frena a alguien son las
    policies de Supabase (es_admin/es_encargado/es_escaner), porque con un
    token válido cualquiera puede llamar a la API REST sin pasar por acá. */
 const ROLES = {
-  admin:     { titulo:"Admin",     desc:"Acceso total al Studio, incluida la gestión del equipo." },
-  encargado: { titulo:"Encargado", desc:"Ve y edita eventos, ve compradores y analytics. No gestiona roles ni configuración." },
-  escaner:   { titulo:"Escáner",   desc:"Sólo la pantalla de escaneo de QR en la puerta." }
+  admin:     { titulo:"Organizador", desc:"Acceso total al Studio, incluida la gestión del equipo." },
+  encargado: { titulo:"Encargado",   desc:"Ve y edita eventos, ve compradores y analytics, y manda cortesías. No gestiona roles ni configuración." },
+  escaner:   { titulo:"Escáner",     desc:"Sólo la pantalla de escaneo de QR en la puerta." }
 };
+// El nombre visible de un rol, siempre desde ROLES (nunca hardcodeado)
+function tituloRol(rol){ return ROLES[rol] ? ROLES[rol].titulo : "Sin rol"; }
 const ROL_ORDEN = ["admin", "encargado", "escaner"];  // de mayor a menor alcance
 function iconoRol(rol){
   if(rol === "admin")     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3.2v5c0 4.4-3 8.3-7.5 9.6-4.5-1.3-7.5-5.2-7.5-9.6v-5z"/><path d="M9.2 12l2 2 3.6-3.8"/></svg>`;
@@ -1552,6 +1568,7 @@ const SECCIONES_ADMIN = [
   { clave:"resumen",        titulo:"Resumen",        roles:["admin","encargado"] },
   { clave:"eventos",        titulo:"Eventos",        roles:["admin","encargado"] },
   { clave:"compradores",    titulo:"Compradores",    roles:["admin","encargado"] },
+  { clave:"cortesias",      titulo:"Cortesías",      roles:["admin","encargado"] },
   { clave:"usuarios",       titulo:"Usuarios",       roles:["admin"] },
   { clave:"equipo",         titulo:"Equipo",         roles:["admin"] },
   { clave:"patrocinadores", titulo:"Patrocinadores", roles:["admin"] }
@@ -1660,7 +1677,7 @@ function bloquearStudio(mensaje, destino, textoBoton){
 }
 /* Sección vedada dentro del panel (el rol sí entra al Studio, pero no ahí) */
 function avisarSinPermiso(titulo){
-  alert(`No tenés permiso para ver "${titulo}". Tu rol es ${ROLES[ROL] ? ROLES[ROL].titulo : "sin acceso"}.`);
+  alert(`No tenés permiso para ver "${titulo}". Tu rol es ${ROL ? tituloRol(ROL) : "sin acceso"}.`);
   const inicial = seccionInicial();
   if(inicial && inicial !== SECCION_ADMIN) mostrarSeccionAdmin(inicial);
 }
@@ -1692,6 +1709,11 @@ async function abrirPanel(){
     await cargarTipos(true);   // el panel también edita los tipos pausados
     renderTiposForm();
     renderEventAdmin();
+  }
+  // Los selects de cortesías salen de EVENTS + TIPOS, así que van después
+  if(puedeVerSeccion("cortesias")){
+    if(!puedeVerSeccion("eventos")) await cargarTipos(true);
+    cargarSelectsCortesia();
   }
   // El equipo primero: la tabla de usuarios muestra el rol de cada uno
   if(puedeVerSeccion("equipo")) await loadEquipo();
@@ -2239,8 +2261,8 @@ async function deleteEvento(id){
 let VISTAS_EVENTO = [];       // [{fecha}] del evento abierto
 let VISTAS_EVENTO_ID = null;  // de qué evento son las de arriba
 
-// Las compras aprobadas de un evento. Se busca por id y, para las compras
-// viejas que sólo guardaron el nombre, también por nombre.
+// Las entradas aprobadas de un evento (ventas Y cortesías). Se busca por id
+// y, para las compras viejas que sólo guardaron el nombre, también por nombre.
 function comprasDeEvento(ev){
   return PURCHASES.filter(c=>{
     if(!esAprobada(c)) return false;
@@ -2248,6 +2270,12 @@ function comprasDeEvento(ev){
     return (c.evento || "") === (ev.nombre || "");
   });
 }
+/* Una cortesía es una entrada regalada desde el Studio (ver "CORTESÍAS"):
+   vale en la puerta igual que cualquier otra, pero NO es una venta. Todo lo
+   que diga "facturación", "vendidos" o "recaudación" la deja afuera; se
+   cuenta aparte para que no parezca que desaparecieron entradas. */
+const esCortesia = c => (c.origen || "venta") === "cortesia";
+function ventasDeEvento(ev){ return comprasDeEvento(ev).filter(c => !esCortesia(c)); }
 async function cargarVistasEvento(eventoId){
   if(DEMO){ VISTAS_EVENTO = []; VISTAS_EVENTO_ID = eventoId; return; }
   try{
@@ -2270,9 +2298,11 @@ function renderAnalyticsEvento(){
 }
 
 function pintarAnalyticsEvento(ev){
-  const compras = comprasDeEvento(ev);
-  const facturacion = compras.reduce((a,c) => a + (Number(c.total) || 0), 0);
-  const tickets = compras.length;
+  // Los KPIs de plata miran sólo las ventas; las cortesías van aparte.
+  const ventas = ventasDeEvento(ev);
+  const cortesias = comprasDeEvento(ev).filter(esCortesia);
+  const facturacion = ventas.reduce((a,c) => a + (Number(c.total) || 0), 0);
+  const tickets = ventas.length;
   const vistas = VISTAS_EVENTO_ID === ev.id ? VISTAS_EVENTO.length : 0;
   const promedio = tickets ? Math.round(facturacion / tickets) : 0;
 
@@ -2284,25 +2314,43 @@ function pintarAnalyticsEvento(ev){
     { label:"Ticket promedio",   valor:fmt(promedio) }
   ].map(k => `<div class="kpi"><small>${k.label}</small><b>${esc(k.valor)}</b></div>`).join("");
 
-  pintarTiposAnalytics(ev, compras);
-  pintarChartEvento(ev, compras);
+  // Las cortesías existen y entran por la puerta, así que se muestran —
+  // sólo que no como venta.
+  const nota = document.getElementById("ev-cortesias-nota");
+  if(nota){
+    nota.textContent = cortesias.length
+      ? `+ ${cortesias.length} cortesía${cortesias.length===1?"":"s"} enviada${cortesias.length===1?"":"s"} (no cuentan en la facturación)`
+      : "";
+    nota.style.display = cortesias.length ? "block" : "none";
+  }
+
+  pintarTiposAnalytics(ev, ventas, cortesias);
+  pintarChartEvento(ev, ventas);
 }
 
 /* Desglose por tipo de ticket, de mayor a menor recaudación. "Disponibles"
    es el cupo que queda; un tipo sin cupo (cantidad null) no tiene ni tope ni
-   porcentaje, así que muestra "Sin límite" y un guion. */
-function pintarTiposAnalytics(ev, compras){
+   porcentaje, así que muestra "Sin límite" y un guion.
+
+   Las cortesías no suman a "vendidos" ni a la recaudación, pero SÍ ocupan
+   lugar en el cupo (el que entra con una cortesía ocupa un lugar real en el
+   boliche), así que se descuentan de "disponibles" y se muestran al lado del
+   nombre del tipo. */
+function pintarTiposAnalytics(ev, ventas, cortesias){
   const tb = document.getElementById("ev-an-tipos");
   if(!tb) return;
+  const delTipo = (filas, t) => filas.filter(c => String(c.tipo_ticket_id) === String(t.id)
+    || (c.tipo_ticket_id == null && (c.tipo || "") === (t.nombre || "")));
   const filas = tiposDeEvento(ev.id).map(t=>{
-    const suyas = compras.filter(c => String(c.tipo_ticket_id) === String(t.id)
-      || (c.tipo_ticket_id == null && (c.tipo || "") === (t.nombre || "")));
+    const suyas = delTipo(ventas, t);
     const vendidos = suyas.length;
+    const cortesiasTipo = delTipo(cortesias || [], t).length;
     const recaudado = suyas.reduce((a,c) => a + (Number(c.total) || 0), 0);
     const cupo = t.cantidad == null ? null : Number(t.cantidad);
-    return { nombre:t.nombre || "—", vendidos, recaudado, cupo,
-             disponibles: cupo == null ? null : Math.max(0, cupo - vendidos),
-             pct: cupo ? Math.min(100, Math.round(vendidos / cupo * 100)) : null };
+    const ocupados = vendidos + cortesiasTipo;
+    return { nombre:t.nombre || "—", vendidos, cortesias:cortesiasTipo, recaudado, cupo,
+             disponibles: cupo == null ? null : Math.max(0, cupo - ocupados),
+             pct: cupo ? Math.min(100, Math.round(ocupados / cupo * 100)) : null };
   }).sort((a,b) => b.recaudado - a.recaudado);
 
   if(!filas.length){
@@ -2311,7 +2359,7 @@ function pintarTiposAnalytics(ev, compras){
   }
   tb.innerHTML = filas.map(f => `
     <tr>
-      <td data-label="Tipo" class="tabla-tipos-nombre"><b>${esc(f.nombre)}</b></td>
+      <td data-label="Tipo" class="tabla-tipos-nombre"><b>${esc(f.nombre)}</b>${f.cortesias ? ` <span class="an-cortesias">+${f.cortesias} cortesía${f.cortesias===1?"":"s"}</span>` : ""}</td>
       <td data-label="Vendidos">${f.vendidos}</td>
       <td data-label="Disponibles">${f.disponibles == null ? "Sin límite" : f.disponibles}</td>
       <td data-label="% vendido">${f.pct == null ? "—" : `
@@ -2454,14 +2502,16 @@ function descargarVentasEvento(){
       tipo: nombreTipo(c),
       cantidad: 1,
       monto: Number(c.total) || 0,
-      estado: c.estado || "aprobado"
+      estado: c.estado || "aprobado",
+      // Para que en la planilla se vea cuál es venta y cuál regalada
+      origen: esCortesia(c) ? "cortesía" : "venta"
     });
   });
 
   const limpiar = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const head = ["Fecha","Comprador","Email","DNI","Tipo de ticket","Cantidad","Monto","Estado"].join(",");
+  const head = ["Fecha","Comprador","Email","DNI","Tipo de ticket","Cantidad","Monto","Estado","Origen"].join(",");
   const body = [...ordenes.values()]
-    .map(o => [o.fecha, o.comprador, o.email, o.dni, o.tipo, o.cantidad, o.monto, o.estado].map(limpiar).join(","))
+    .map(o => [o.fecha, o.comprador, o.email, o.dni, o.tipo, o.cantidad, o.monto, o.estado, o.origen].map(limpiar).join(","))
     .join("\n");
   const blob = new Blob(["﻿" + head + "\n" + body], {type:"text/csv;charset=utf-8"});
   const a = document.createElement("a");
@@ -2744,11 +2794,23 @@ async function loadUsuarios(){
   if(!COLABORADORES.length) await loadEquipo();
   drawUsuarios();
 }
+// El rol de un usuario registrado, para la columna "Rol" y su filtro:
+// "admin"/"encargado"/"escaner" si está en el equipo, o null si no tiene
+// ninguno todavía (el filtro lo llama "sinrol", ver drawUsuarios).
+function rolDeUsuario(u){
+  const email = (u.email||"").toLowerCase();
+  if(!email) return null;
+  if(email === ADMIN_EMAIL.toLowerCase()) return "admin";
+  const c = COLABORADORES.find(x => (x.email||"").toLowerCase() === email);
+  return c ? rolPrincipal(c) : null;
+}
 function drawUsuarios(){
   const tb = document.getElementById("tbody-usuarios");
   if(!tb) return;
   const q = (document.getElementById("filtro-usuarios")?.value||"").toLowerCase();
-  const rows = USUARIOS.filter(u => ((u.nombre||"")+" "+(u.apellido||"")+" "+(u.email||"")).toLowerCase().includes(q));
+  const rolFiltro = document.getElementById("filtro-usuarios-rol")?.value || "";
+  let rows = USUARIOS.filter(u => ((u.nombre||"")+" "+(u.apellido||"")+" "+(u.email||"")).toLowerCase().includes(q));
+  if(rolFiltro) rows = rows.filter(u => (rolDeUsuario(u) || "sinrol") === rolFiltro);
   tb.innerHTML = rows.map((u,i)=>`
     <tr>
       <td style="color:var(--text-dim)">${i+1}</td>
@@ -2825,7 +2887,7 @@ function drawEquipo(){
       <span class="colab-avatar">${avatar}</span>
       <span class="colab-nombre">${esc(c.nombre || c.email)}</span>
       ${rol
-        ? `<span class="colab-rol" data-rol="${rol}">${iconoRol(rol)}${ROLES[rol].titulo}</span>`
+        ? `<span class="colab-rol" data-rol="${rol}">${iconoRol(rol)}${tituloRol(rol)}</span>`
         : `<span class="colab-rol" data-rol="ninguno">Sin rol</span>`}
       <span class="colab-alcance">${esc(alcanceTexto(c))}</span>
       ${c.activo ? "" : `<span class="colab-tag">Inactivo</span>`}
@@ -2910,7 +2972,7 @@ function renderEquipoModal(){
       ${ROL_ORDEN.map(r=>`
         <button class="eq-rol${EQ.rol === r ? " elegido" : ""}" data-rol="${r}" onclick="eqSetRol('${r}')">
           <span class="eq-rol-ico">${iconoRol(r)}</span>
-          <b>${ROLES[r].titulo}</b>
+          <b>${tituloRol(r)}</b>
           <span>${ROLES[r].desc}</span>
         </button>`).join("")}
     </div>
@@ -3022,14 +3084,153 @@ async function eliminarColaborador(id){
 function botonEquipoUsuario(u){
   const email = (u.email||"").toLowerCase();
   if(!email) return "—";
-  if(email === ADMIN_EMAIL.toLowerCase()) return `<span class="pill-estado aprobado">Admin</span>`;
+  if(email === ADMIN_EMAIL.toLowerCase()) return `<span class="pill-estado aprobado">${tituloRol("admin")}</span>`;
   const c = COLABORADORES.find(x => (x.email||"").toLowerCase() === email);
   if(c){
-    const rol = rolPrincipal(c);
-    return `<button class="btn ghost btn-mini" onclick="abrirColaborador(${c.id})">${rol ? ROLES[rol].titulo : "Sin rol"}</button>`;
+    return `<button class="btn ghost btn-mini" onclick="abrirColaborador(${c.id})">${tituloRol(rolPrincipal(c))}</button>`;
   }
   const datos = JSON.stringify({ nombre:((u.nombre||"")+" "+(u.apellido||"")).trim(), email, telefono:u.telefono||"" }).replace(/"/g,"&quot;");
   return `<button class="btn btn-mini" onclick="nuevoColaborador(${datos})">Sumar al equipo</button>`;
+}
+
+/* ================== CORTESÍAS (Studio) ==================
+   Una cortesía es una entrada válida emitida a mano por el organizador o un
+   encargado y mandada por mail, sin pasar por Mercado Pago. Va a la misma
+   tabla `compras` que una venta —así el escáner de la puerta la acepta sin
+   saber nada nuevo— pero con origen='cortesia', que es lo que la deja
+   afuera de la facturación en Analytics (ver comprasDeEvento/ventasDeEvento).
+
+   Quién puede: organizador (rol admin) sobre cualquier evento, y encargado
+   sobre los eventos que tenga asignados. El escáner no. Eso lo decide la
+   policy compras_cortesia_equipo (sql/cortesias.sql), no este archivo: acá
+   sólo se esconde la sección, que es gating de interfaz nada más. */
+function cargarSelectsCortesia(){
+  const selEv = document.getElementById("cor-evento");
+  if(!selEv) return;
+  const previo = selEv.value;
+  selEv.innerHTML = EVENTS.length
+    ? EVENTS.map(ev => `<option value="${ev.id}">${esc(ev.nombre)}</option>`).join("")
+    : `<option value="">No hay eventos cargados</option>`;
+  if(previo && EVENTS.some(e => String(e.id) === previo)) selEv.value = previo;
+  corCambiarEvento();
+}
+function corCambiarEvento(){
+  const selEv = document.getElementById("cor-evento");
+  const selTipo = document.getElementById("cor-tipo");
+  if(!selEv || !selTipo) return;
+  const ev = EVENTS.find(e => String(e.id) === selEv.value);
+  // Todos los tipos del evento, incluidos los pausados/ocultos: una cortesía
+  // no depende de que ese tipo esté a la venta al público.
+  const tipos = ev ? tiposDeEvento(ev.id) : [];
+  selTipo.innerHTML = tipos.length
+    ? tipos.map(t => `<option value="${t.id}">${esc(t.nombre)}${Number(t.accesos) > 1 ? ` (${Number(t.accesos)} accesos)` : ""}</option>`).join("")
+    : `<option value="">Este evento no tiene tipos de entrada</option>`;
+}
+// Vacía los campos pero deja a la vista la cortesía recién generada
+function corLimpiarCampos(){
+  ["cor-nombre","cor-apellido","cor-email"].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = "";
+  });
+  const err = document.getElementById("cor-err"); if(err) err.style.display = "none";
+}
+// El botón "Limpiar": además se lleva puesto el QR de la anterior
+function resetCortesiaForm(){
+  corLimpiarCampos();
+  const res = document.getElementById("cor-resultado"); if(res) res.innerHTML = "";
+}
+
+async function enviarCortesia(){
+  const err = document.getElementById("cor-err");
+  const btn = document.getElementById("cor-btn");
+  const res = document.getElementById("cor-resultado");
+  const fallar = txt => { if(err){ err.textContent = txt; err.style.display = "block"; } };
+  if(err) err.style.display = "none";
+
+  const ev = EVENTS.find(e => String(e.id) === (document.getElementById("cor-evento")?.value || ""));
+  if(!ev) return fallar("Elegí un evento.");
+  const tipoId = document.getElementById("cor-tipo")?.value || "";
+  const tipo = tiposDeEvento(ev.id).find(t => String(t.id) === tipoId);
+  if(!tipo) return fallar("Elegí un tipo de entrada. Si el evento no tiene ninguno, cargalo primero en Eventos.");
+  const email = (document.getElementById("cor-email")?.value || "").trim();
+  if(!emailValido(email)) return fallar("Escribí un email de destino válido.");
+
+  const nombre = (document.getElementById("cor-nombre")?.value || "").trim() || "Invitación";
+  const apellido = (document.getElementById("cor-apellido")?.value || "").trim();
+
+  // compras.codigo es único: el grupo lleva bastante azar como para no
+  // chocar, y el prefijo CORT- hace obvio de dónde salió mirando la tabla.
+  const grupo = "CORT-" + Date.now().toString(36).toUpperCase().slice(-5) + Math.random().toString(36).slice(2,6).toUpperCase();
+  const codigo = grupo + "-1";
+  const fila = {
+    grupo, codigo,
+    evento: ev.nombre, evento_id: ev.id,
+    fecha_texto: ev.fecha_texto || null, lugar: ev.lugar || null,
+    tipo: tipo.nombre, tipo_ticket_id: tipo.id, accesos: Number(tipo.accesos) || 1,
+    nombre, apellido, email,
+    comprador_nombre: nombre, comprador_apellido: apellido, comprador_documento: null, comprador_telefono: null,
+    total: 0,                 // una cortesía no factura: se regala
+    estado: "aprobado",       // lo que hace que el escáner la acepte
+    usada: false,
+    origen: "cortesia",
+    user_id: null
+  };
+
+  if(btn){ btn.disabled = true; btn.textContent = "Generando..."; }
+  let creada = false, mailOk = false;
+  try{
+    if(DEMO){ DEMO_PURCHASES.push({...fila, creado_en:new Date().toISOString()}); creada = true; }
+    else { await dbInsert("compras", fila); creada = true; }
+  }catch(e){
+    const sinPermiso = (e.message||"").includes("row-level security");
+    fallar(sinPermiso
+      ? "Tu rol no puede emitir cortesías para este evento."
+      : "No se pudo generar la entrada: " + e.message);
+  }
+
+  /* El mail lo manda una Edge Function, igual que las entradas de una compra
+     real: la clave de Resend no puede vivir en el navegador. Contrato:
+       POST /functions/v1/enviar-cortesia
+       { email, codigo, evento, evento_id, fecha_texto, lugar, tipo,
+         accesos, nombre, apellido }
+     Todavía NO está deployada (como crear-pago y reenviar-entradas, vive
+     fuera de este repo), así que hoy esto falla y se muestra el QR en
+     pantalla para mandarlo a mano. La entrada ya quedó creada y es válida. */
+  if(creada && !DEMO){
+    try{
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/enviar-cortesia`, {
+        method:"POST",
+        headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+(ADMIN_TOKEN || SUPABASE_KEY), "Content-Type":"application/json" },
+        body: JSON.stringify({
+          email, codigo, evento: ev.nombre, evento_id: ev.id,
+          fecha_texto: ev.fecha_texto || "", lugar: ev.lugar || "",
+          tipo: tipo.nombre, accesos: Number(tipo.accesos) || 1, nombre, apellido
+        })
+      });
+      mailOk = r.ok;
+    }catch(e){ mailOk = false; }
+  } else if(creada && DEMO){ mailOk = true; }
+
+  if(creada && res){
+    res.innerHTML = `
+      <div class="dash-card cortesia-ok">
+        <p class="cortesia-ok-titulo">${mailOk ? "Cortesía enviada" : "Cortesía generada"}</p>
+        <p class="cortesia-ok-detalle">
+          ${esc(tipo.nombre)} · ${esc(ev.nombre)}<br>
+          ${mailOk
+            ? `Le mandamos el QR a <b>${esc(email)}</b>.`
+            : `La entrada ya es válida, pero <b>el mail no salió</b>: falta deployar la función <code>enviar-cortesia</code>. Mostrale o mandale este QR mientras tanto.`}
+        </p>
+        <div class="cortesia-qr">
+          <div class="qr-real" data-code="${esc(codigo)}"></div>
+          <p class="cortesia-codigo">${esc(codigo)}</p>
+        </div>
+      </div>`;
+    pintarQRs();
+    corLimpiarCampos();
+    // Que aparezca ya en Compradores y en los analytics del evento
+    if(!DEMO) loadPurchases();
+  }
+  if(btn){ btn.disabled = false; btn.textContent = "Generar y enviar"; }
 }
 
 /* ================== PATROCINADORES (Studio) ==================
@@ -3233,68 +3434,6 @@ function salirEscaner(){
   mostrarLoginEscaner();
 }
 
-/* ---------- VENDIDAS (dentro de la app de la puerta) ----------
-   El equipo también necesita ver qué se vendió y a quién, no solo escanear.
-   Sin señal cae a la copia descargada, así en la puerta sigue sirviendo. */
-let VENDIDAS = [];
-function vistaPuerta(v){
-  const esEscaner = v === "escaner";
-  document.getElementById("et-escaner").classList.toggle("active", esEscaner);
-  document.getElementById("et-vendidas").classList.toggle("active", !esEscaner);
-  document.getElementById("vista-escaner").style.display = esEscaner ? "block" : "none";
-  document.getElementById("vista-vendidas").style.display = esEscaner ? "none" : "block";
-  // La cámara no puede quedar prendida atrás consumiendo batería
-  if(!esEscaner){ stopScanner(); cargarVendidas(); }
-}
-async function cargarVendidas(){
-  const box = document.getElementById("vend-list");
-  if(!box) return;
-  if(!VENDIDAS.length) box.innerHTML = `<div class="loading">Cargando...</div>`;
-
-  if(navigator.onLine){
-    try{
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/compras?estado=eq.aprobado&select=codigo,nombre,apellido,evento,tipo,usada,usada_en&order=creado_en.desc`, {
-        headers: authHeaders()
-      });
-      const filas = await r.json();
-      if(Array.isArray(filas)) VENDIDAS = filas;
-    }catch(e){}
-  }
-  // Sin señal, o si falló, usamos la lista que se bajó para la puerta
-  if(!VENDIDAS.length){
-    const lista = leerLista();
-    if(lista && lista.entradas) VENDIDAS = Object.values(lista.entradas);
-  }
-  dibujarVendidas();
-}
-function dibujarVendidas(){
-  const box = document.getElementById("vend-list");
-  const res = document.getElementById("vend-resumen");
-  if(!box) return;
-
-  const q = (document.getElementById("vend-filtro")?.value||"").trim().toLowerCase();
-  const filas = q
-    ? VENDIDAS.filter(c => `${c.nombre||""} ${c.apellido||""} ${c.evento||""} ${c.codigo||""}`.toLowerCase().includes(q))
-    : VENDIDAS;
-
-  if(res){
-    const entraron = VENDIDAS.filter(c=>c.usada).length;
-    res.innerHTML = `<b>${VENDIDAS.length}</b> vendidas · <b>${entraron}</b> ya entraron · faltan <b>${VENDIDAS.length - entraron}</b>`
-      + (q ? ` · mostrando ${filas.length}` : "");
-  }
-
-  box.innerHTML = filas.map(c=>{
-    const hora = c.usada_en ? new Date(c.usada_en).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "";
-    return `<div class="vend-item${c.usada?" entro":""}">
-      <div class="vend-datos">
-        <span class="nm">${esc(c.nombre)} ${esc(c.apellido)}</span>
-        <span class="det">${esc(c.evento||"")}${c.tipo?" · "+esc(c.tipo):""}</span>
-      </div>
-      <span class="vend-estado">${c.usada ? "entró "+hora : "falta"}</span>
-    </div>`;
-  }).join("") || `<p style="color:var(--text-dim);font-size:14px;padding:14px 0">${VENDIDAS.length ? "Nadie coincide con esa búsqueda." : "No hay entradas vendidas todavía."}</p>`;
-}
-
 /* ---------- MODO PUERTA (sin internet) ----------
    Antes de abrir se descarga la lista de entradas aprobadas al celular. Si en
    el evento no hay señal, el escáner valida contra esa copia y va guardando
@@ -3395,25 +3534,14 @@ async function sincronizarPuerta(silencioso){
   if(subidos && navigator.onLine) cargarIngresos();
 }
 
+/* Antes también escribía la línea "Con señal · Sin lista descargada" arriba
+   del botón "Descargar lista" (#puerta-estado); se sacó de la pantalla del
+   escáner a pedido, así que esto quedó sólo con lo que sigue siendo
+   funcional: mostrar "Subir ingresos" cuando hay check-ins offline sin
+   sincronizar todavía. */
 function pintarEstadoPuerta(){
-  const box = document.getElementById("puerta-estado");
-  if(!box) return;
-  const lista = leerLista();
-  const cola = leerCola();
-  const n = lista && lista.entradas ? Object.keys(lista.entradas).length : 0;
-
-  const partes = [];
-  partes.push(navigator.onLine
-    ? `<span class="pt-ok">Con señal</span>`
-    : `<span class="pt-off">Sin señal · modo puerta</span>`);
-  partes.push(lista
-    ? `${n} entrada(s) guardadas · ${new Date(lista.actualizado).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`
-    : `<span class="pt-warn">Sin lista descargada</span>`);
-  if(cola.length) partes.push(`<span class="pt-warn">${cola.length} sin subir</span>`);
-
-  box.innerHTML = partes.join(" · ");
   const btnSync = document.getElementById("puerta-sync");
-  if(btnSync) btnSync.style.display = cola.length ? "inline-block" : "none";
+  if(btnSync) btnSync.style.display = leerCola().length ? "inline-block" : "none";
 }
 
 async function startScanner(){
