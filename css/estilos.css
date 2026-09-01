@@ -269,13 +269,17 @@ body > nav{
     linear-gradient(0deg, rgba(13,13,13,.95) 0%, transparent 60%),
     rgba(0,0,0,.25);
 }
-/* Cachengue: la foto trae un logo "BRONX" semi-transparente propio, en la
-   mitad inferior, justo donde cae el texto de bajada — se leía doble. El
-   degradado de acá se queda opaco (.97→.9) hasta la mitad de la foto en vez
-   de empezar a aclarar enseguida, para taparlo del todo detrás del texto. */
-.hero[data-tinte="naranja"] .hero-bg::after{background:
-  linear-gradient(0deg, rgba(13,13,13,.97) 0%, rgba(13,13,13,.9) 45%, transparent 68%),
-  rgba(0,0,0,.25)}
+/* Cachengue: sin degradado ni capa encima de la foto — pedido explícito,
+   se ve la imagen limpia con sólo el texto arriba. (Antes tenía acá un
+   degradado más opaco para tapar un logo "BRONX" semi-transparente propio
+   de la foto; ese logo va a quedar visible detrás del texto ahora que no
+   hay overlay — es la contrapartida consciente de este pedido.) El glow
+   de acento detrás del título también se apaga para este slide por el
+   mismo motivo: es otra capa sobre la foto, y su borde difuminado se veía
+   como un recuadro redondeado encima de la imagen. Los otros dos slides
+   no se tocan. */
+.hero[data-tinte="naranja"] .hero-bg::after{background:none}
+.hero[data-tinte="naranja"] .hero-glow.activo{opacity:0}
 /* Jueves Picante: el cartel "PICANTE" de la foto (la parte más cargada) cae
    justo en el tercio superior, donde va el eyebrow gris — se perdía. Un
    segundo degradado, de arriba hacia abajo esta vez, oscurece sólo ese
