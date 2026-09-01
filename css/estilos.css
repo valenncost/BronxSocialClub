@@ -2,37 +2,60 @@
    BRONX SOCIAL CLUB — hoja de estilos única, compartida por las 5 páginas.
 
    Reglas de la casa:
-   - Fondo negro plano. Nada de glows, degradados de fondo ni sombras de color,
-     salvo el hero (ver "COLOR DE ACENTO POR EVENTO" y "HERO" más abajo).
-   - --accent es sólido y se usa para bordes finos, íconos y foco. El botón
-     primario, las palabras destacadas del hero y los estados activos con
-     fondo lleno usan --accent-gradient. El degradado rosa→naranja (--gradient)
-     sigue siendo sólo del logo.
+   - Base negra (#0D0D0D) con VELADURAS translúcidas encima: las superficies
+     son rgba, no bloques sólidos, así el fondo se ve a través y la
+     profundidad sale por capas. Nada de fondos de color plano.
+   - La paleta del sitio es blanco y grises. El color entra sólo por evento
+     (data-color-evento) — ver "COLOR DE ACENTO POR EVENTO" más abajo.
+   - Donde antes había un borde o un fondo de color, ahora va un glow
+     difuminado (--glow-suave / --glow-fuerte), que sale del mismo
+     --acento-rgb y por lo tanto también se re-tiñe por evento.
+   - --accent es sólido (blanco por defecto) y se usa para bordes finos,
+     íconos, foco y el relleno del botón primario. --accent-gradient quedó
+     sólo para las palabras destacadas del hero; el degradado rosa→naranja
+     (--gradient) sigue siendo del logo.
    - Escala de espaciado de 4px. Radios: 8 inputs y botones, 12 tarjetas,
      999 pills. Bordes de 1px. Sombra sólo en los modales.
    ============================================================ */
 
 :root{
-  --bg:#08080A;
-  --surface:#0F0F12;
-  --surface-2:#16161A;
-  --border:#1F1F24;
+  --bg:#0D0D0D;
+  /* Las superficies son VELADURAS translúcidas sobre el negro, no bloques
+     sólidos: así el fondo se sigue viendo a través de las tarjetas y el
+     sitio gana profundidad por capas en vez de por cajas grises.
+     Van en blanco con alpha muy baja y no en negro a propósito — negro
+     sobre negro no se ve; el negro translúcido queda para los velos que van
+     ARRIBA de una foto (hero, fondo del detalle, overlay del modal), donde
+     sí tiene algo que oscurecer. */
+  --surface:rgba(255,255,255,.035);
+  --surface-2:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.10);
   --text:#FAFAFA;
   --text-dim:#8B8B93;
-  --text-faint:#55555C;
-  --accent:#F58C29;
-  /* El mismo naranja en canal suelto, para las cuatro luces de acento
-     (rgba(var(--acento-rgb),a)). Existe para que un evento con color propio
-     pueda re-teñirlas cambiando una sola variable — ver "COLOR DE ACENTO POR
-     EVENTO" más abajo. Si cambiás --accent, cambiá también esto. */
-  --acento-rgb:245,140,41;
+  /* Se subió de #55555C: sobre el negro daba 2.6:1 y encima de una veladura
+     todavía menos. #6E6E76 sigue leyéndose como terciario pero pasa el 3:1
+     hasta sobre --surface-2, que es el fondo más claro que hay. */
+  --text-faint:#6E6E76;
+  /* Acento NEUTRO por defecto: el sitio en sí ya no tiene color de marca en
+     botones ni bordes. Ojo, esto es sólo el DEFAULT: cualquier contenedor
+     con data-color-evento redefine estas mismas variables con el color de
+     ese evento y todo lo que cuelga adentro se re-tiñe solo (ver "COLOR DE
+     ACENTO POR EVENTO" más abajo). Ese sistema no cambió. */
+  --accent:#FFFFFF;
+  /* El mismo color en canal suelto, para las luces de acento
+     (rgba(var(--acento-rgb),a)). Si cambiás --accent, cambiá también esto. */
+  --acento-rgb:255,255,255;
+  --acento-par:#E8E8E8;
   --accent-2:#F4526B;
   --gradient:linear-gradient(135deg,#F4526B,#F58C29);
-  /* Degradado de identidad: botón primario, palabras destacadas del hero y
-     estados activos con fondo lleno. --accent en sí queda sólido (bordes
-     finos, íconos, foco) — este es el único lugar donde el naranja de marca
-     se pinta como degradado fuera del logo. */
+  /* Único sobreviviente del naranja de marca: las palabras destacadas del
+     hero, que tiene su propio sistema de tintes por slide ([data-tinte]) y
+     queda tal cual estaba. Los botones y las pestañas activas ya no lo usan:
+     ahora son blanco sólido con glow. */
   --accent-gradient:linear-gradient(135deg,#FF6B35,#F7931E);
+  /* Glow: el reemplazo de los bordes y fondos de color plano. */
+  --glow-suave:0 0 20px rgba(var(--acento-rgb),.10);
+  --glow-fuerte:0 0 28px rgba(var(--acento-rgb),.22);
 
   /* Semánticos, para estados */
   --ok:#22C55E;
@@ -68,8 +91,8 @@ a{color:inherit}
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
-    radial-gradient(ellipse 60% 45% at 20% 0%, rgba(245,140,41,0.02), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 85% 60%, rgba(244,82,107,0.012), transparent 70%);
+    radial-gradient(ellipse 60% 45% at 20% 0%, rgba(255,255,255,0.022), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 85% 60%, rgba(255,255,255,0.014), transparent 70%);
 }
 /* ---------- COLOR DE ACENTO POR EVENTO ----------
    Cada evento guarda una clave de color en eventos.color_acento; el JS la
@@ -147,11 +170,15 @@ section.angosta{max-width:480px}
   text-decoration:none;text-align:center;white-space:nowrap;
   font-family:inherit;font-size:0.875rem;font-weight:600;line-height:1.2;
   padding:12px 20px;border-radius:var(--radio-campo);
-  background:var(--accent-gradient);color:#0A0A0A;
+  /* Relleno sólido del acento (blanco por defecto, el color del evento
+     adentro de un data-color-evento) con un glow suave alrededor, en vez
+     del degradado de marca que tenía antes. */
+  background:var(--accent);color:#0A0A0A;
+  box-shadow:var(--glow-suave);
   transition:opacity var(--transicion),background var(--transicion),
              border-color var(--transicion),box-shadow var(--transicion);
 }
-.btn:hover{opacity:.9;box-shadow:0 4px 16px rgba(var(--acento-rgb),0.20)}
+.btn:hover{opacity:.9;box-shadow:var(--glow-fuerte)}
 /* Deshabilitado se apaga a superficie: el naranja bajado de opacidad sobre
    negro da un marrón sucio que no se lee como "inactivo". */
 .btn:disabled{background:var(--surface-2);border-color:var(--border);color:var(--text-faint);cursor:default}
@@ -197,6 +224,10 @@ input:focus,textarea:focus,select:focus{
 input::placeholder,textarea::placeholder{color:var(--text-faint)}
 textarea{min-height:96px;resize:vertical}
 select{cursor:pointer}
+/* El desplegable nativo del <select> hereda el fondo del elemento, y una
+   veladura translúcida ahí deja el texto ilegible (el sistema lo pinta sobre
+   blanco). Las opciones van con un negro sólido propio. */
+option{background:#141416;color:var(--text)}
 label{display:block;margin-bottom:8px}
 .field{margin-bottom:16px}
 .check-row{display:flex;align-items:center;gap:12px}
@@ -228,7 +259,7 @@ body > nav{
   position:sticky;top:0;z-index:50;
   display:flex;justify-content:space-between;align-items:center;gap:16px;
   padding:16px 24px;
-  background:rgba(8,8,10,.88);backdrop-filter:blur(12px);
+  background:rgba(13,13,13,.88);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);flex-wrap:wrap;
 }
 .logo{display:flex;align-items:center;background:none;border:none;padding:0;cursor:pointer;line-height:1}
@@ -429,7 +460,7 @@ body > nav{
 .art-name{color:var(--text);font-size:1.125rem;font-weight:600;letter-spacing:-0.01em;line-height:1.35}
 .tag-soldout{
   position:absolute;top:12px;right:12px;z-index:2;
-  background:rgba(8,8,10,.72);border:1px solid var(--border);border-radius:999px;
+  background:rgba(13,13,13,.72);border:1px solid var(--border);border-radius:999px;
   padding:4px 12px;font-size:0.75rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text);
 }
 .ticket-info{padding:16px 2px 0}
@@ -451,7 +482,7 @@ body > nav{
   background-size:cover;background-position:center;
   filter:blur(72px);
 }
-.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(8,8,10,.75)}
+.detail-bg::after{content:"";position:absolute;inset:0;background:rgba(13,13,13,.75)}
 /* Evento sin foto: el logo atenuado sin blur — a diferencia del hero, acá
    no lleva el tratamiento de blur+capa; es sólo un respaldo. */
 .detail-bg:not([style*="background-image"]){
@@ -520,7 +551,7 @@ body > nav{
   padding:20px;transition:background var(--transicion),border-color var(--transicion);
 }
 .tipo-card + .tipo-card{margin-top:12px}
-.tipo-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25)}
+.tipo-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25);box-shadow:var(--glow-suave)}
 /* Con cantidad elegida: la marca queda encendida aunque saques el mouse */
 .tipo-card.elegida{border-color:var(--accent);background:rgba(var(--acento-rgb),0.04)}
 .tipo-card.agotado{opacity:.45}
@@ -571,8 +602,9 @@ body > nav{
   position:fixed;left:0;right:0;bottom:0;z-index:60;
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   padding:14px 24px;padding-bottom:calc(14px + env(safe-area-inset-bottom));
-  background:var(--surface);border-top:1px solid var(--border);
-  box-shadow:0 -8px 24px rgba(0,0,0,.35);
+  background:rgba(13,13,13,.88);backdrop-filter:blur(16px);
+  border-top:1px solid var(--border);
+  box-shadow:0 -8px 24px rgba(0,0,0,.45),0 0 32px rgba(var(--acento-rgb),.06);
 }
 .d-floatbar-info{display:flex;flex-direction:column;gap:2px;min-width:0}
 .d-floatbar-count{font-size:0.875rem;font-weight:600;color:var(--text)}
@@ -587,15 +619,16 @@ body > nav{
 .overlay{
   position:fixed;inset:0;z-index:100;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(8,8,10,.72);padding:24px;
+  background:rgba(13,13,13,.72);padding:24px;
   opacity:0;pointer-events:none;transition:opacity var(--transicion);
 }
 .overlay.open{opacity:1;pointer-events:auto}
 .modal{
   width:100%;max-width:440px;
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  background:rgba(255,255,255,.05);backdrop-filter:blur(20px);
+  border:1px solid var(--border);border-radius:var(--radio-card);
   padding:22px;max-height:92vh;overflow-y:auto;
-  box-shadow:0 16px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);
+  box-shadow:0 16px 48px rgba(0,0,0,.5),0 0 32px rgba(var(--acento-rgb),.05);
 }
 .modal .mdate{font-size:0.875rem;color:var(--text-dim);margin-bottom:24px}
 .modal h3{margin-bottom:4px}
@@ -615,7 +648,7 @@ body > nav{
    cuerpo lo dibuja renderCheckout() en app.js; acá van los estados.
    Pensado a una columna: en móvil compra el 95% de la gente, así que la
    versión angosta es la de referencia y la de escritorio es la excepción. */
-.modal-checkout{max-width:520px;background:#1A1A1A;border-radius:20px;padding:20px}
+.modal-checkout{max-width:520px;background:rgba(255,255,255,.05);backdrop-filter:blur(20px);border-radius:20px;padding:20px}
 
 /* Cambio de paso: fade + slide horizontal sutil (ver "ANIMACIONES SUAVES").
    renderCheckout() en app.js saca y vuelve a poner esta clase en cada
@@ -638,7 +671,7 @@ body > nav{
 .ck-step{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;min-width:0}
 .ck-step::before{
   content:"";position:absolute;top:14px;right:50%;width:100%;height:2px;
-  background:#2A2A2A;z-index:0;
+  background:rgba(255,255,255,.14);z-index:0;
   transition:background 250ms ease;
 }
 .ck-step:first-child::before{display:none}
@@ -648,7 +681,7 @@ body > nav{
   width:29px;height:29px;border-radius:999px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   font-size:0.75rem;font-weight:700;
-  background:#2A2A2A;color:var(--text-faint);
+  background:rgba(255,255,255,.08);color:var(--text-faint);
   transition:background 250ms ease,color 250ms ease;
 }
 .ck-step.activo .ck-circulo,.ck-step.hecho .ck-circulo{background:var(--accent);color:#0A0A0A}
@@ -708,7 +741,7 @@ body > nav{
 /* Paso 2 y 3: formularios a una sola columna, label arriba de cada campo */
 .ck-campos{display:flex;flex-direction:column;gap:14px}
 .ck-campo label{display:block;margin-bottom:6px}
-.ck-campo input,.ck-campo select{width:100%;background:#222226}
+.ck-campo input,.ck-campo select{width:100%;background:rgba(255,255,255,.05)}
 /* El mensaje de error entra con un fade sutil (ver "ANIMACIONES SUAVES" del
    pedido) sin tocar el JS: una animación CSS no corre mientras el elemento
    está display:none, así que alternar display "none"→"block" (lo que ya
@@ -731,7 +764,7 @@ body > nav{
   box-shadow:0 2px 8px rgba(0,0,0,.22);
   transition:border-color var(--transicion),background var(--transicion);
 }
-.ck-camino:hover{background:var(--surface-2);border-color:var(--accent)}
+.ck-camino:hover{background:var(--surface-2);border-color:var(--accent);box-shadow:var(--glow-suave)}
 .ck-camino b{display:block;font-size:0.875rem;font-weight:600}
 .ck-camino span{display:block;font-size:0.75rem;color:var(--text-dim);margin-top:4px}
 
@@ -827,7 +860,7 @@ body > nav{
   font-family:inherit;font-size:0.875rem;font-weight:500;padding:10px;border-radius:999px;
   transition:background var(--transicion),color var(--transicion);
 }
-.auth-tab.active{background:var(--accent-gradient);color:#0A0A0A;font-weight:600}
+.auth-tab.active{background:var(--accent);color:#0A0A0A;font-weight:600;box-shadow:var(--glow-suave)}
 .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:24px}
 .auth-card .two{display:flex;gap:12px}
 .auth-card .two .field{flex:1}
@@ -857,7 +890,8 @@ body > nav{
 .dash-side{
   position:sticky;top:0;flex:0 0 240px;width:240px;height:100vh;
   display:flex;flex-direction:column;
-  background:var(--surface);border-right:1px solid var(--border);z-index:40;
+  background:rgba(13,13,13,.82);backdrop-filter:blur(16px);
+  border-right:1px solid var(--border);z-index:40;
 }
 .dash-side-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:24px 20px;border-bottom:1px solid var(--border)}
 .dash-logo{height:24px;width:auto;display:block}
@@ -891,7 +925,7 @@ body > nav{
   position:sticky;top:0;z-index:30;
   display:flex;align-items:center;gap:16px;
   padding:16px 32px;
-  background:rgba(8,8,10,.88);backdrop-filter:blur(12px);
+  background:rgba(13,13,13,.88);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
 }
 .dash-burger{display:none;background:none;border:1px solid var(--border);border-radius:var(--radio-campo);color:var(--text);cursor:pointer;padding:8px;line-height:0}
@@ -906,7 +940,7 @@ body > nav{
 #admin-panel .admin-section.activa{display:block}
 .admin-section > h3{margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
 
-.dash-backdrop{display:none;position:fixed;inset:0;background:rgba(8,8,10,.72);z-index:39}
+.dash-backdrop{display:none;position:fixed;inset:0;background:rgba(13,13,13,.72);z-index:39}
 @media (max-width:900px){
   .dash-side{position:fixed;top:0;left:0;transform:translateX(-100%);transition:transform var(--transicion)}
   .dash-side.abierto{transform:none}
@@ -937,7 +971,7 @@ body > nav{
 .resumen-chart-caption{color:var(--text-dim);font-size:0.875rem;margin-bottom:16px}
 .resumen-chart-svg{width:100%;height:200px;display:block}
 .resumen-chart-base{stroke:var(--border);stroke-width:1}
-.resumen-chart-area{fill:rgba(245,140,41,.12);stroke:none}
+.resumen-chart-area{fill:rgba(var(--acento-rgb),.12);stroke:none}
 .resumen-chart-linea{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .resumen-chart-label{font-size:13px;fill:var(--text-faint)}
 .admin-bar{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:24px}
@@ -959,7 +993,7 @@ body > nav{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:16px 20px;
   transition:background var(--transicion),border-color var(--transicion);
 }
-.ev-admin-item:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+.ev-admin-item:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25);box-shadow:var(--glow-suave)}
 .ev-admin-item .info b{display:block;font-weight:600}
 .ev-admin-item .info span{font-size:0.8125rem;color:var(--text-dim)}
 .ev-admin-item .row-actions{display:flex;gap:8px}
@@ -978,7 +1012,7 @@ body > nav{
   padding:12px 16px;
   transition:background var(--transicion),border-color var(--transicion);
 }
-.ev-item:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25)}
+.ev-item:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25);box-shadow:var(--glow-suave)}
 .ev-item-portada{
   width:52px;height:52px;flex-shrink:0;border-radius:var(--radio-campo);
   background:var(--surface-2) center/cover no-repeat;border:1px solid var(--border);
@@ -1079,7 +1113,7 @@ body > nav{
   overflow:hidden;display:flex;flex-direction:column;
   transition:background var(--transicion),border-color var(--transicion);
 }
-.evento-card:hover{background:var(--surface-2);border-color:rgba(245,140,41,0.25)}
+.evento-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25);box-shadow:var(--glow-suave)}
 .evento-card-portada{height:140px;background-size:cover;background-position:center;background-color:var(--surface-2)}
 .evento-card-body{padding:16px;display:flex;flex-direction:column;flex:1}
 .evento-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px}
@@ -1148,7 +1182,7 @@ tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
   transition:border-color var(--transicion),background var(--transicion);
 }
-.colab-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25)}
+.colab-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25);box-shadow:var(--glow-suave)}
 .colab-card.inactivo{opacity:.5}
 .colab-avatar{
   width:52px;height:52px;border-radius:999px;overflow:hidden;flex-shrink:0;
@@ -1294,7 +1328,7 @@ body.app-instalada{padding-bottom:env(safe-area-inset-bottom,0px)}
   transition:opacity 500ms ease,transform 500ms ease,border-color 200ms ease,background 200ms ease;
 }
 .patrocinadores.visible .marquee-item{opacity:1;transform:translateY(0)}
-.marquee-item:hover{border-color:var(--accent);background:var(--surface-2)}
+.marquee-item:hover{border-color:var(--accent);background:var(--surface-2);box-shadow:var(--glow-suave)}
 .marquee-item img{
   display:block;max-width:100%;max-height:100%;width:auto;height:auto;
   opacity:0.7;
