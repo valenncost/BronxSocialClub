@@ -87,7 +87,6 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
         <p class="dash-breadcrumb"><span>Studio</span> <em>/</em> <b id="dash-titulo">Resumen</b></p>
-        <button class="btn" id="btn-crear-evento" onclick="nuevoEvento()">Crear evento</button>
       </header>
 
       <div class="dash-body">
@@ -122,9 +121,61 @@
 
         <!-- ---------- EVENTOS ---------- -->
         <div class="admin-section" id="sec-eventos">
-          <h3>Eventos</h3>
-          <div class="eventos-grid" id="ev-admin-list"></div>
 
+          <!-- ---------- EVENTOS: LISTA ---------- -->
+          <div id="ev-vista-lista">
+            <h3>Eventos</h3>
+            <div class="ev-lista" id="ev-admin-list"></div>
+            <button class="btn" id="ev-nuevo-btn" onclick="nuevoEvento()">Nuevo evento</button>
+          </div>
+
+          <!-- ---------- EVENTOS: DETALLE (Analytics / Editar) ---------- -->
+          <div id="ev-vista-detalle" style="display:none">
+            <button class="back" onclick="volverAListaEventos()">← Todos los eventos</button>
+            <div class="ev-detalle-head">
+              <h3 id="ev-detalle-nombre">Evento</h3>
+              <div class="ev-detalle-acciones" id="ev-detalle-acciones"></div>
+            </div>
+
+            <div class="ev-tabs" id="ev-tabs">
+              <button class="ev-tab" id="ev-tab-analytics" onclick="mostrarTabEvento('analytics')">Analytics</button>
+              <button class="ev-tab" id="ev-tab-editar" onclick="mostrarTabEvento('editar')">Editar evento</button>
+            </div>
+
+            <!-- ANALYTICS -->
+            <div id="ev-pane-analytics">
+              <div class="kpis" id="ev-kpis"></div>
+
+              <div class="dash-card" style="margin-bottom:20px">
+                <div class="ev-an-head">
+                  <h3 style="border:none;margin:0">Ventas por tipo de ticket</h3>
+                  <button class="btn ghost btn-mini" onclick="descargarVentasEvento()">Descargar</button>
+                </div>
+                <div class="table-wrap tabla-tipos-wrap" style="margin-top:16px">
+                  <table class="tabla-tipos-an">
+                    <thead><tr>
+                      <th>Tipo</th><th>Vendidos</th><th>Disponibles</th><th>% vendido</th><th>Recaudación</th>
+                    </tr></thead>
+                    <tbody id="ev-an-tipos"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="dash-card">
+                <h3 style="border:none;margin-bottom:4px">Evolución de ventas y visitas</h3>
+                <p class="resumen-chart-caption" id="ev-an-chart-caption"></p>
+                <div class="ev-chart-scroll">
+                  <div class="ev-chart-inner" id="ev-an-chart"></div>
+                </div>
+                <div class="ev-chart-leyenda">
+                  <span class="ev-leyenda-item ventas">Ventas ($)</span>
+                  <span class="ev-leyenda-item visitas">Visitas</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- EDITAR EVENTO (el formulario de siempre) -->
+            <div id="ev-pane-editar" style="display:none">
           <div class="dash-card" id="ev-form">
             <h3 style="border:none;margin-bottom:16px" id="form-title">Nuevo evento</h3>
             <p class="err" id="ev-err"></p>
@@ -181,6 +232,8 @@
               <button class="btn ghost" onclick="resetEventoForm()">Limpiar</button>
             </div>
           </div>
+            </div><!-- /ev-pane-editar -->
+          </div><!-- /ev-vista-detalle -->
 
           <!-- "Eventos pasados" sacado del Studio (pendiente reemplazo por una
                sección de artistas que pasaron por Bronx, ver CLAUDE.md). El
@@ -246,7 +299,7 @@
                 <option value="tipo">Por tipo de entrada</option>
               </select>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div class="admin-bar-acciones">
               <button class="btn ghost" onclick="loadPurchases()">Actualizar</button>
               <button class="btn ghost" onclick="limpiarFiltros()">Limpiar filtros</button>
               <button class="btn ghost" id="btn-borrar-pend" onclick="borrarPendientes()" style="border-color:rgba(239,68,68,.5);color:#ef4444">Borrar pendientes</button>
@@ -266,8 +319,8 @@
             </table>
           </div>
 
-          <div class="table-wrap">
-            <table>
+          <div class="table-wrap tabla-compras-wrap">
+            <table class="tabla-compras">
               <thead><tr>
                 <th>#</th><th>Fecha compra</th><th>Nombre</th><th>Apellido</th><th>Evento</th><th>Tipo</th><th>Precio</th><th>Estado</th><th>Ingresó</th><th>Código</th>
               </tr></thead>
@@ -298,15 +351,14 @@
 
         <!-- ---------- EQUIPO ---------- -->
         <div class="admin-section" id="sec-equipo">
-          <h3>Equipo (acceso al escáner)</h3>
-          <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px">Agregá los emails de tu equipo. Van a poder entrar a este panel <b>solo para escanear y ver compradores</b> — no pueden tocar eventos ni nada más. Cada uno tiene que crearse su cuenta en la página (Ingresar → Registrarse) con ese mismo email.</p>
-          <div class="alta-staff">
-            <input type="email" id="staff-email" placeholder="amigo@gmail.com" onkeydown="if(event.key==='Enter')agregarStaff()">
-            <button class="btn" onclick="agregarStaff()">Agregar</button>
+          <div class="equipo-head">
+            <div>
+              <h3 style="border:none;margin:0">Equipo</h3>
+              <p style="color:var(--text-dim);font-size:14px;margin-top:4px">Cada persona entra con su propia cuenta de la página (Ingresar → Registrarse) usando el mismo email que cargues acá. Tocá una tarjeta para cambiarle el rol o el alcance.</p>
+            </div>
+            <button class="btn" onclick="nuevoColaborador()">Agregar colaborador</button>
           </div>
-          <p class="ok" id="staff-ok"></p>
-          <p class="err" id="staff-err"></p>
-          <div class="ev-admin-list" id="staff-list"></div>
+          <div class="equipo-grid" id="equipo-grid"></div>
         </div>
 
         <!-- ---------- PATROCINADORES ---------- -->
@@ -341,6 +393,29 @@
 
       </div>
     </div>
+  </div>
+
+  <!-- ============ SIN ACCESO ============
+       Un rol que no entra al Studio (el escáner) no se queda mirando un
+       panel vacío: lee por qué y se lo lleva a donde sí puede entrar.
+       Lo maneja bloquearStudio() en js/app.js. -->
+  <section class="angosta" id="admin-sinacceso" style="display:none">
+    <div class="dash-card">
+      <h3 style="border:none;margin-bottom:8px">Esta pantalla no es para tu rol</h3>
+      <p style="color:var(--text-dim);font-size:14px;margin-bottom:18px" id="sinacceso-msg"></p>
+      <button class="btn ancho" id="sinacceso-btn">Continuar</button>
+      <button class="dash-link" onclick="logout()" style="margin-top:16px">Cerrar sesión</button>
+    </div>
+  </section>
+</div>
+
+<!-- ============ MODAL EQUIPO (detalle / alta de colaborador) ============
+     El cuerpo lo dibuja renderEquipoModal() en js/app.js. -->
+<div class="overlay" id="overlay-equipo" role="dialog" aria-modal="true">
+  <div class="modal modal-equipo">
+    <button class="close" onclick="cerrarEquipoModal()" aria-label="Cerrar">✕</button>
+    <h3 id="equipo-modal-titulo"></h3>
+    <div id="equipo-modal-cuerpo"></div>
   </div>
 </div>
 

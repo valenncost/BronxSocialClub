@@ -89,6 +89,13 @@ let DEMO_PURCHASES = [];
 const DEMO_PATROCINADORES = [
   {id:1, nombre:"Cervecería Bronx", logo_url:"/iconos/logo-bronx.png", link:null, orden:0, activo:true},
 ];
+// Equipo de demo: mismo shape que devuelve colaboradores con sus roles
+// embebidos (ver loadEquipo y sql/roles-equipo.sql).
+let DEMO_COLABORADORES = [
+  {id:1, nombre:"Nano Rabbione", email:"nano@bronx.test", telefono:"291-500-0000", foto_url:null, activo:true, colaborador_rol:[{rol:"admin", evento_id:null}]},
+  {id:2, nombre:"Sofi Encargada", email:"sofi@bronx.test", telefono:"291-500-1111", foto_url:null, activo:true, colaborador_rol:[{rol:"encargado", evento_id:1}]},
+  {id:3, nombre:"Tincho Puerta",  email:"tincho@bronx.test", telefono:null, foto_url:null, activo:true, colaborador_rol:[{rol:"escaner", evento_id:null}]},
+];
 
 let EVENTS = [];
 let PURCHASES = [];
@@ -471,6 +478,45 @@ function openDetail(id, empujarURL=true){
 
   go('detalle');
   medirDesc();
+  registrarVistaEvento(ev.id);
+}
+
+/* ---------- VISTAS DE LA PÁGINA DEL EVENTO ----------
+   Suma una fila en evento_vistas (sql/evento-vistas.sql) para el KPI
+   "Vistas" y la línea de visitas del gráfico de Analytics.
+
+   Dedup en dos capas: acá el sessionStorage evita el insert si esta pestaña
+   ya contó este evento (refrescar diez veces no suma diez visitas), y en la
+   base un índice único por (evento, sesión, día) tapa lo que llegue igual.
+   El 409 de ese índice es el caso esperado, no un error que mostrar: esto
+   es analítica, nunca puede romper la página del comprador. */
+function idSesionVisitante(){
+  try{
+    let sid = localStorage.getItem("tp_sid");
+    if(!sid){
+      sid = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+      localStorage.setItem("tp_sid", sid);
+    }
+    return sid;
+  }catch(e){ return null; }   // navegador sin storage: no se cuenta y listo
+}
+async function registrarVistaEvento(eventoId){
+  if(DEMO || !eventoId) return;
+  const sid = idSesionVisitante();
+  if(!sid) return;
+  const marca = "tp_vista_" + eventoId;
+  try{ if(sessionStorage.getItem(marca)) return; }catch(e){}
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/evento_vistas`, {
+      method:"POST",
+      // return=minimal: anon puede insertar pero no leer esta tabla, así que
+      // pedir la fila de vuelta daría 401 (mismo patrón que compras).
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+SUPABASE_KEY,
+                "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body: JSON.stringify({ evento_id: eventoId, session_id: sid })
+    });
+    try{ sessionStorage.setItem(marca, "1"); }catch(e){}
+  }catch(e){ /* silencio: una visita no contada no le arruina la compra a nadie */ }
 }
 
 /* ================== LISTA DE TIPOS EN EL DETALLE ==================
@@ -598,11 +644,21 @@ function actualizarResumenDetalle(){
   // ofrece seguir como invitado (ver "CHECKOUT DE 4 PASOS").
   btn.textContent = `Comprar ${s.entradas} ${s.entradas === 1 ? "entrada" : "entradas"} · ${fmt(s.total)}`;
   btn.onclick = ()=>abrirCheckout(cur.id);
+
+  const floatbar = document.getElementById("d-floatbar");
+  if(floatbar){
+    floatbar.style.display = s.entradas ? "flex" : "none";
+    const fbCount = document.getElementById("d-floatbar-count");
+    if(fbCount) fbCount.textContent = `${s.entradas} ${s.entradas === 1 ? "entrada" : "entradas"}`;
+    const fbTotal = document.getElementById("d-floatbar-total");
+    if(fbTotal) fbTotal.textContent = fmt(s.total);
+    const fbBtn = document.getElementById("d-floatbar-btn");
+    if(fbBtn) fbBtn.onclick = ()=>abrirCheckout(cur.id);
+  }
 }
 
-/* ================== CHECKOUT DE 4 PASOS ==================
-   Un solo modal con stepper arriba: 1 Revisá tu orden · 2 Comprador ·
-   3 Tickets · 4 Confirmación. Todo el cuerpo se dibuja desde acá
+/* ================== CHECKOUT ==================
+   Un solo modal con stepper arriba, cuerpo dibujado desde acá
    (renderCheckout) sobre la cáscara que está en index.html.
 
    Regla que se repite en todo el archivo y también acá: los inputs escriben
@@ -610,9 +666,40 @@ function actualizarResumenDetalle(){
    tecla pierde el foco a mitad de palabra. Sólo re-renderizan los cambios de
    estructura (cambiar de paso, sumar/restar una entrada, tildar "usar mis
    datos"). Lo que sí se refresca en vivo es el cartel de error y el estado
-   del botón "Siguiente", que se tocan por id. */
+   del botón "Siguiente", que se tocan por id.
 
-const CK_PASOS = ["Revisá tu orden", "Comprador", "Tickets", "Confirmación"];
+   Los 4 pasos de siempre (Revisá tu orden · Comprador · Tickets ·
+   Confirmación) son el flujo por defecto — el único que existe en desktop,
+   sin excepción. En mobile, si además hay sesión iniciada (o DEMO) y la
+   compra es de una sola entrada, ckPasosActivos() devuelve una versión de 3
+   pasos que fusiona Comprador+Tickets en un solo paso "Tus datos": con un
+   solo asistente, sus datos son los mismos que los del comprador, así que
+   no tiene sentido pedirlos dos veces. Con 2+ entradas o sin sesión (mobile
+   o desktop) se mantienen los 4 pasos, porque cada asistente necesita sus
+   propios datos.
+   Los botones "Volver"/"Siguiente" navegan siempre en relativo
+   (CK.paso-1 / CK.paso+1) para no tener que saber en qué array de pasos
+   están parados. */
+const CK_PASOS = [
+  { clave:"orden",     titulo:"Revisá tu orden" },
+  { clave:"comprador", titulo:"Comprador" },
+  { clave:"tickets",   titulo:"Tickets" },
+  { clave:"confirmacion", titulo:"Confirmación" }
+];
+// Sólo mobile: en desktop este checkout es siempre el de 4 pasos de arriba.
+const CK_MOBILE_MQ = "(max-width:640px)";
+function ckModoCombinado(){
+  return !!(CK && (USER || DEMO) && matchMedia(CK_MOBILE_MQ).matches && totalesSeleccion().entradas === 1);
+}
+function ckPasosActivos(){
+  if(!ckModoCombinado()) return CK_PASOS;
+  return [ CK_PASOS[0], { clave:"datos", titulo:"Tus datos" }, CK_PASOS[3] ];
+}
+function ckPasoClave(paso){
+  const pasos = ckPasosActivos();
+  const p = pasos[(paso || CK.paso) - 1];
+  return p ? p.clave : pasos[pasos.length - 1].clave;
+}
 
 /* El selector de país del teléfono. Argentina primero porque es el default
    real del negocio (un boliche de Bahía Blanca); el resto son los países
@@ -653,25 +740,31 @@ function ckNuevo(){
     cuponTexto: "",
     cuponMsg: "",
     cuponOk: false,
+    terminosAceptados: false,
     error: ""
   };
 }
 
 /* Una ficha de asistente por QR, en el mismo orden que unidadesSeleccionadas()
    (que es el orden en que confirmBuy las lee de vuelta). Al cambiar cantidades
-   en el paso 1 se conservan los datos ya cargados por posición. */
+   en el paso 1 se conservan los datos ya cargados por posición.
+   En el paso combinado ("Tus datos", ver arriba) hay un solo asistente y no
+   existe una pantalla propia para cargarlo: sus datos son un espejo en vivo
+   de los del comprador, así que acá se pisan con los de CK.comprador en cada
+   sync en vez de conservar lo que hubiera antes. */
 function ckSincronizarAsistentes(){
   const unidades = unidadesSeleccionadas();
   const previos = CK.asistentes || [];
+  const combinado = ckModoCombinado() && unidades.length === 1;
   CK.asistentes = unidades.map((tipo, i)=>({
     tipo_ticket_id: tipo.id,
     tipo: tipo.nombre,
     accesos: Number(tipo.accesos) || 1,
     precio: Number(tipo.precio) || 0,
     servicio: servicioDe(tipo.precio),
-    nombre:    previos[i] ? previos[i].nombre    : "",
-    apellido:  previos[i] ? previos[i].apellido  : "",
-    documento: previos[i] ? previos[i].documento : ""
+    nombre:    combinado ? CK.comprador.nombre    : (previos[i] ? previos[i].nombre    : ""),
+    apellido:  combinado ? CK.comprador.apellido  : (previos[i] ? previos[i].apellido  : ""),
+    documento: combinado ? CK.comprador.documento : (previos[i] ? previos[i].documento : "")
   }));
 }
 
@@ -686,6 +779,34 @@ function abrirCheckout(id){
   document.getElementById("modal-done").style.display = "none";
   document.getElementById("overlay").classList.add("open");
   renderCheckout();
+  ckPrecargarUltimaCompra();
+}
+
+/* Mobile + con sesión: además de nombre/apellido/email (ya vienen del
+   propio USER, ver ckNuevo), completa DNI y teléfono con lo que haya en su
+   última compra aprobada — la cuenta no guarda esos datos, sólo quedan en
+   compras.comprador_*. Es un "nice to have" en segundo plano: si falla o
+   tarda, el comprador completa esos campos a mano como siempre. Sólo pisa
+   inputs que siguen vacíos, para no llevarse por delante algo que el
+   usuario ya haya tipeado mientras esto viajaba por la red. */
+async function ckPrecargarUltimaCompra(){
+  if(!CK || DEMO || !USER || !matchMedia(CK_MOBILE_MQ).matches) return;
+  try{
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/compras?email=eq.${encodeURIComponent(USER.email)}&estado=eq.aprobado&order=creado_en.desc&limit=1&select=comprador_documento,comprador_telefono`, {
+      headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+USER.token }
+    });
+    if(!r.ok || !CK) return;
+    const filas = await r.json();
+    const ultima = Array.isArray(filas) ? filas[0] : null;
+    if(!ultima) return;
+    if(!CK.comprador.documento && ultima.comprador_documento) CK.comprador.documento = ultima.comprador_documento;
+    if(!CK.comprador.telefono && ultima.comprador_telefono) CK.comprador.telefono = ultima.comprador_telefono;
+    const setVal = (id, val) => { const el = document.getElementById(id); if(el && !el.value && val) el.value = val; };
+    setVal("ck-documento", CK.comprador.documento);
+    setVal("ck-telefono", CK.comprador.telefono);
+    ckSincronizarAsistentes();
+    ckRefrescarValidacion();
+  }catch(e){ /* silencioso: sin esto, el comprador completa los campos a mano */ }
 }
 
 /* ---------- Navegación entre pasos ---------- */
@@ -694,16 +815,19 @@ function ckIr(paso){
   // Hacia adelante se valida el paso actual; hacia atrás nunca se bloquea.
   if(paso > CK.paso && !ckPasoValido(CK.paso)) return;
   CK.error = "";
-  CK.paso = Math.min(4, Math.max(1, paso));
+  CK.paso = Math.min(ckPasosActivos().length, Math.max(1, paso));
   renderCheckout();
   const modal = document.getElementById("modal-buy");
   if(modal) modal.scrollTop = 0;
 }
 
 function ckPasoValido(paso){
-  if(paso === 1) return totalesSeleccion().entradas > 0;
-  if(paso === 2) return !!CK.camino && ckCompradorValido() === "";
-  if(paso === 3) return ckTicketsValido() === "";
+  ckSincronizarAsistentes();
+  const clave = ckPasoClave(paso);
+  if(clave === "orden") return totalesSeleccion().entradas > 0;
+  if(clave === "comprador") return !!CK.camino && ckCompradorValido() === "";
+  if(clave === "tickets") return ckTicketsValido() === "";
+  if(clave === "datos") return ckCompradorValido() === "" && ckTicketsValido() === "";
   return true;
 }
 
@@ -743,11 +867,19 @@ function ckAsistente(i, campo, valor){
 }
 /* Actualiza sólo el cartel de error y el botón, para no perder el foco */
 function ckRefrescarValidacion(){
-  const msg = CK.paso === 2 ? ckCompradorValido() : CK.paso === 3 ? ckTicketsValido() : "";
+  if(!CK) return;
+  // Mantiene CK.asistentes al día con lo que se va tipeando en "Tus datos"
+  // (paso combinado, ver ckSincronizarAsistentes) antes de validar nada.
+  ckSincronizarAsistentes();
+  const clave = ckPasoClave();
+  const msg = clave === "comprador" ? ckCompradorValido()
+    : clave === "tickets" ? ckTicketsValido()
+    : clave === "datos" ? (ckCompradorValido() || ckTicketsValido())
+    : "";
   const err = document.getElementById("ck-error");
   // El error se muestra recién cuando el campo tiene algo escrito: que salte
   // en rojo apenas abrís el formulario vacío es peor que no decir nada.
-  const empezoACargar = CK.paso === 2
+  const empezoACargar = (clave === "comprador" || clave === "datos")
     ? Object.values(CK.comprador).some(v => (v||"").trim() && v !== "DNI" && v !== "+54")
     : CK.asistentes.some(a => a.nombre || a.apellido || a.documento);
   if(err){
@@ -795,23 +927,25 @@ function renderCheckout(){
   renderCkStepper();
   const cuerpo = document.getElementById("ck-cuerpo");
   if(!cuerpo) return;
+  const clave = ckPasoClave();
   cuerpo.innerHTML =
-    CK.paso === 1 ? ckPaso1() :
-    CK.paso === 2 ? ckPaso2() :
-    CK.paso === 3 ? ckPaso3() : ckPaso4();
+    clave === "orden"     ? ckPaso1() :
+    clave === "comprador" ? ckPaso2() :
+    clave === "tickets"   ? ckPaso3() :
+    clave === "datos"     ? ckPasoDatos() : ckPaso4();
   ckRefrescarValidacion();
 }
 
 function renderCkStepper(){
   const ol = document.getElementById("ck-stepper");
   if(!ol) return;
-  ol.innerHTML = CK_PASOS.map((titulo, i)=>{
+  ol.innerHTML = ckPasosActivos().map((p, i)=>{
     const n = i + 1;
     const clase = n === CK.paso ? "activo" : n < CK.paso ? "hecho" : "";
     const dentro = n < CK.paso ? "✓" : n;
     return `<li class="ck-step ${clase}">
       <span class="ck-circulo">${dentro}</span>
-      <span class="ck-label">${esc(titulo)}</span>
+      <span class="ck-label">${esc(p.titulo)}</span>
     </li>`;
   }).join("");
 }
@@ -859,7 +993,7 @@ function ckPaso1(){
     </div>
 
     <div class="ck-pie ck-pie-solo">
-      <button class="btn" id="ck-siguiente" onclick="ckIr(2)">Siguiente</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(${CK.paso + 1})">Siguiente</button>
     </div>`;
 }
 function ckSumar(tipoId){
@@ -896,10 +1030,32 @@ function ckPaso2(){
         </button>
       </div>
       <div class="ck-pie">
-        <button class="btn ghost" onclick="ckIr(1)">Volver</button>
+        <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
       </div>`;
   }
 
+  return `
+    ${CK.camino === "invitado" ? `<p style="color:var(--text-dim);font-size:0.8125rem;margin-bottom:16px">Comprás como invitado. Te mandamos las entradas a este mail.</p>` : ""}
+    ${ckCamposComprador()}
+    <p class="ck-error" id="ck-error" style="display:none"></p>
+    <div class="ck-pie">
+      <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(${CK.paso + 1})">Siguiente</button>
+    </div>`;
+}
+function ckCamino(cual){
+  // "Iniciar sesión" sin sesión activa manda a /cuenta y vuelve al evento
+  if(cual === "sesion" && !USER && !DEMO){
+    try{ localStorage.setItem("tp_volver", "/?evento=" + cur.id); }catch(e){}
+    go("cuenta");
+    return;
+  }
+  CK.camino = cual;
+  renderCheckout();
+}
+/* El formulario de datos del comprador — lo comparten el paso 2 de siempre
+   (ckPaso2) y el paso combinado de mobile logueado (ckPasoDatos). */
+function ckCamposComprador(){
   const c = CK.comprador;
   const campo = (id, label, tipo, valor, extra="") => `
     <div class="ck-campo">
@@ -909,7 +1065,6 @@ function ckPaso2(){
     </div>`;
 
   return `
-    ${CK.camino === "invitado" ? `<p style="color:var(--text-dim);font-size:0.8125rem;margin-bottom:16px">Comprás como invitado. Te mandamos las entradas a este mail.</p>` : ""}
     <div class="ck-campos">
       ${campo("nombre", "Nombre", "text", c.nombre, 'autocomplete="given-name"')}
       ${campo("apellido", "Apellido", "text", c.apellido, 'autocomplete="family-name"')}
@@ -932,22 +1087,22 @@ function ckPaso2(){
                  oninput="ckCampo('telefono', this.value)" autocomplete="tel">
         </div>
       </div>
-    </div>
-    <p class="ck-error" id="ck-error" style="display:none"></p>
-    <div class="ck-pie">
-      <button class="btn ghost" onclick="ckIr(1)">Volver</button>
-      <button class="btn" id="ck-siguiente" onclick="ckIr(3)">Siguiente</button>
     </div>`;
 }
-function ckCamino(cual){
-  // "Iniciar sesión" sin sesión activa manda a /cuenta y vuelve al evento
-  if(cual === "sesion" && !USER && !DEMO){
-    try{ localStorage.setItem("tp_volver", "/?evento=" + cur.id); }catch(e){}
-    go("cuenta");
-    return;
-  }
-  CK.camino = cual;
-  renderCheckout();
+/* PASO COMBINADO — sólo mobile + con sesión + 1 sola entrada (ver
+   ckModoCombinado). Fusiona Comprador+Tickets: con un único asistente sus
+   datos son los del comprador (el espejo lo hace ckSincronizarAsistentes),
+   así que alcanza con este único formulario ya precargado — el comprador
+   sólo confirma que está bien y sigue. */
+function ckPasoDatos(){
+  return `
+    <p style="color:var(--text-dim);font-size:0.8125rem;margin-bottom:16px">Comprás con tu cuenta. Revisá que tus datos estén bien.</p>
+    ${ckCamposComprador()}
+    <p class="ck-error" id="ck-error" style="display:none"></p>
+    <div class="ck-pie">
+      <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(${CK.paso + 1})">Siguiente</button>
+    </div>`;
 }
 
 /* PASO 3 — Tickets */
@@ -985,8 +1140,8 @@ function ckPaso3(){
     }).join("")}
     <p class="ck-error" id="ck-error" style="display:none"></p>
     <div class="ck-pie">
-      <button class="btn ghost" onclick="ckIr(2)">Volver</button>
-      <button class="btn" id="ck-siguiente" onclick="ckIr(4)">Siguiente</button>
+      <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
+      <button class="btn" id="ck-siguiente" onclick="ckIr(${CK.paso + 1})">Siguiente</button>
     </div>`;
 }
 function ckUsarMisDatos(tildado){
@@ -999,44 +1154,40 @@ function ckUsarMisDatos(tildado){
   renderCheckout();
 }
 
-/* PASO 4 — Confirmación (sólo lectura) */
+/* PASO 4 — Confirmación (compacta: sólo lo que no se vio ya en los pasos
+   1-3 — el detalle del evento y los datos del comprador no se repiten acá). */
 function ckPaso4(){
-  const c = CK.comprador;
   const s = totalesSeleccion();
   return `
-    <div class="ck-repaso">
-      <h4>${esc(cur.nombre)}</h4>
-      <div class="ck-dato"><span>Cuándo</span><b>${esc([cur.fecha_texto, cur.puertas].filter(Boolean).join(" · ") || "-")}</b></div>
-      <div class="ck-dato"><span>Dónde</span><b>${esc(cur.lugar || "-")}</b></div>
-    </div>
-
-    <div class="ck-repaso">
-      <h4>Entradas</h4>
+    <div class="ck-items-compacto">
       ${itemsSeleccionados().map(({tipo, cantidad})=>`
-        <div class="ck-dato"><span>${cantidad}× ${esc(tipo.nombre)}</span><b>${fmt((Number(tipo.precio)||0)*cantidad)}</b></div>`).join("")}
-      ${CK.asistentes.map((a,i)=>`
-        <div class="ck-dato"><span>Entrada ${i+1}</span><b>${esc(a.nombre)} ${esc(a.apellido)} · ${esc(a.documento)}</b></div>`).join("")}
-    </div>
-
-    <div class="ck-repaso">
-      <h4>Comprador</h4>
-      <div class="ck-dato"><span>Nombre</span><b>${esc(c.nombre)} ${esc(c.apellido)}</b></div>
-      <div class="ck-dato"><span>${esc(c.tipo_doc)}</span><b>${esc(c.documento)}</b></div>
-      <div class="ck-dato"><span>Email</span><b>${esc(c.email)}</b></div>
-      <div class="ck-dato"><span>Teléfono</span><b>${esc(c.pais)} ${esc(c.telefono)}</b></div>
+        <div class="ck-item-simple">
+          <span class="ck-item-simple-nombre" title="${esc(tipo.nombre)}">${cantidad > 1 ? cantidad + "× " : ""}${esc(tipo.nombre)}</span>
+          <b>${fmt((Number(tipo.precio)||0)*cantidad)}</b>
+        </div>`).join("")}
     </div>
 
     <div class="ck-resumen">
-      <div class="ck-linea"><span>Subtotal</span><b>${fmt(s.subtotal)}</b></div>
+      <div class="ck-linea"><span>Costo de tus items</span><b>${fmt(s.subtotal)}</b></div>
       <div class="ck-linea"><span>Cargo por servicio (${+(SERVICIO_PCT*100).toFixed(2)}%)</span><b>${fmt(s.servicio)}</b></div>
       <div class="ck-linea ck-total"><span>Total</span><b>${fmt(s.total)}</b></div>
     </div>
 
+    <label class="ck-check ck-terminos">
+      <input type="checkbox" ${CK.terminosAceptados ? "checked" : ""} onchange="ckToggleTerminos(this.checked)">
+      <span>Acepto los <a href="/terminos" target="_blank" rel="noopener">Términos y Condiciones</a>, la <a href="/privacidad" target="_blank" rel="noopener">Política de Privacidad</a> y la <a href="/devoluciones" target="_blank" rel="noopener">Política de Devoluciones</a></span>
+    </label>
+
     <p class="ck-error" id="ck-error" style="display:none"></p>
-    <div class="ck-pie">
-      <button class="btn ghost" onclick="ckIr(3)">Volver</button>
-      <button class="btn" id="ck-pagar" onclick="ckPagar()">Pagar</button>
+    <div class="ck-pie ck-pie-confirmar">
+      <button class="btn ghost" onclick="ckIr(${CK.paso - 1})">Volver</button>
+      <button class="btn ancho" id="ck-pagar" onclick="ckPagar()" ${CK.terminosAceptados ? "" : "disabled"}>Confirmar</button>
     </div>`;
+}
+function ckToggleTerminos(tildado){
+  CK.terminosAceptados = tildado;
+  const btn = document.getElementById("ck-pagar");
+  if(btn) btn.disabled = !tildado;
 }
 
 /* ---------- Pago ----------
@@ -1050,6 +1201,7 @@ async function ckPagar(){
 
   const problema = ckCompradorValido() || ckTicketsValido();
   if(problema){ mostrarError(problema); return; }
+  if(!CK.terminosAceptados){ mostrarError("Aceptá los Términos y Condiciones para continuar."); return; }
 
   const c = CK.comprador;
   const s = totalesSeleccion();
@@ -1082,7 +1234,7 @@ async function ckPagar(){
     setTimeout(pintarQRs, 50);
     document.getElementById("modal-buy").style.display="none";
     document.getElementById("modal-done").style.display="block";
-    btn.disabled=false; btn.textContent="Pagar";
+    btn.disabled=false; btn.textContent="Confirmar";
     return;
   }
 
@@ -1121,18 +1273,34 @@ async function ckPagar(){
     const data = await r.json();
     if(!r.ok || !data.init_point){
       mostrarError("No se pudo iniciar el pago. Probá de nuevo.");
-      btn.disabled=false; btn.textContent="Pagar"; return;
+      btn.disabled=false; btn.textContent="Confirmar"; return;
     }
     window.location.href = data.init_point;
   }catch(e){
     mostrarError("Error de conexión con el pago. Probá de nuevo.");
-    btn.disabled=false; btn.textContent="Pagar";
+    btn.disabled=false; btn.textContent="Confirmar";
   }
 }
-function closeModal(){ const o=document.getElementById("overlay"); if(o) o.classList.remove("open"); }
+// CK ya se reemplaza entero en abrirCheckout() (CK = ckNuevo()), así que un
+// CK viejo sin resetear acá no debería filtrarse a la próxima compra — pero
+// se limpia explícito igual: barato, y así ningún camino futuro que reabra
+// el modal sin pasar por abrirCheckout() puede reusar sin querer los datos
+// de una compra anterior (invitado o logueado).
+function closeModal(){
+  const o=document.getElementById("overlay");
+  if(o) o.classList.remove("open");
+  CK = null;
+}
 const _overlay = document.getElementById("overlay");
 if(_overlay) _overlay.addEventListener("click", e=>{ if(e.target.id==="overlay") closeModal(); });
-document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+// El modal del equipo (Studio) se cierra igual: tocando afuera o con Escape
+const _overlayEquipo = document.getElementById("overlay-equipo");
+if(_overlayEquipo) _overlayEquipo.addEventListener("click", e=>{ if(e.target.id==="overlay-equipo") cerrarEquipoModal(); });
+document.addEventListener("keydown", e=>{
+  if(e.key !== "Escape") return;
+  closeModal();
+  if(typeof EQ !== "undefined" && EQ) cerrarEquipoModal();
+});
 
 /* ================== MIS ENTRADAS ================== */
 function ticketHTML(c){
@@ -1320,49 +1488,101 @@ async function checkReturnFromPayment(){
 
 /* ================== ADMIN: LOGIN (Supabase Auth) ================== */
 let logged = false;
-// Determina si el email es admin, staff (equipo) o nada
+
+/* ---------- ROLES DEL STUDIO ----------
+   La fuente de verdad es sql/roles-equipo.sql: colaboradores (quién es cada
+   uno, por email) + colaborador_rol (qué rol tiene y sobre qué evento, con
+   evento_id null = todos los eventos). Los 3 roles, de mayor a menor:
+
+     admin      todo el Studio, incluida esta pantalla de Equipo.
+     encargado  ve y edita eventos, ve compradores y analytics. No gestiona
+                roles ni configuración sensible (Mercado Pago, Resend…).
+     escaner    sólo la pantalla de escaneo de QR, nada más del Studio.
+
+   Esto es gating de interfaz: lo que de verdad frena a alguien son las
+   policies de Supabase (es_admin/es_encargado/es_escaner), porque con un
+   token válido cualquiera puede llamar a la API REST sin pasar por acá. */
+const ROLES = {
+  admin:     { titulo:"Admin",     desc:"Acceso total al Studio, incluida la gestión del equipo." },
+  encargado: { titulo:"Encargado", desc:"Ve y edita eventos, ve compradores y analytics. No gestiona roles ni configuración." },
+  escaner:   { titulo:"Escáner",   desc:"Sólo la pantalla de escaneo de QR en la puerta." }
+};
+const ROL_ORDEN = ["admin", "encargado", "escaner"];  // de mayor a menor alcance
+function iconoRol(rol){
+  if(rol === "admin")     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3.2v5c0 4.4-3 8.3-7.5 9.6-4.5-1.3-7.5-5.2-7.5-9.6v-5z"/><path d="M9.2 12l2 2 3.6-3.8"/></svg>`;
+  if(rol === "encargado") return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9.5 15l1.8 1.8 3.4-3.6"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M4 12h16"/></svg>`;
+}
+
+// Datos del colaborador logueado (null si entró con ADMIN_EMAIL, que es
+// admin por hardcodeo, o si no es del equipo).
+let MI_COLAB = null;
+let MIS_ROLES = [];   // [{rol, evento_id}] del que entró
+
+/* Devuelve el rol más alto que tenga esta cuenta, o null si no es del
+   equipo. ADMIN_EMAIL es admin siempre — es el bootstrap para que el dueño
+   no se quede afuera de su propio panel (mismo criterio que es_admin() en
+   sql/roles-equipo.sql: cambiar los dos juntos). */
 async function determinarRol(email, token){
+  MI_COLAB = null; MIS_ROLES = [];
   if((email||"").toLowerCase() === ADMIN_EMAIL.toLowerCase()) return "admin";
   try{
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/staff?email=eq.${encodeURIComponent(email)}&select=email`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/colaboradores?email=eq.${encodeURIComponent((email||"").toLowerCase())}&select=id,nombre,email,telefono,foto_url,activo,colaborador_rol(rol,evento_id)`, {
       headers:{ "apikey":SUPABASE_KEY, "Authorization":"Bearer "+token }
     });
     const filas = await r.json();
-    if(Array.isArray(filas) && filas.length) return "staff";
+    const c = Array.isArray(filas) ? filas[0] : null;
+    // Desactivado = como si no estuviera: las policies piensan igual (c.activo)
+    if(!c || !c.activo) return null;
+    MI_COLAB = c;
+    MIS_ROLES = c.colaborador_rol || [];
+    return ROL_ORDEN.find(rr => MIS_ROLES.some(x => x.rol === rr)) || null;
   }catch(e){}
   return null;
 }
+
 // Muestra u oculta secciones del panel según el rol
-/* Secciones del panel: cada una es una pestaña del sidebar. El escáner es
-   una página aparte, así que no tiene entrada propia acá. "Eventos pasados"
-   vivía adentro de Eventos pero se sacó del Studio (pendiente reemplazo por
-   una sección de artistas que pasaron por Bronx, ver CLAUDE.md) — su
-   sección de HTML (id="sec-pasados") y todo su JS quedaron comentados más
-   abajo, no borrados. */
+/* Secciones del panel: cada una es una pestaña del sidebar, con la lista de
+   roles que pueden verla. El escáner es una página aparte, así que no tiene
+   entrada propia acá. "Eventos pasados" vivía adentro de Eventos pero se
+   sacó del Studio (pendiente reemplazo por una sección de artistas que
+   pasaron por Bronx, ver CLAUDE.md) — su sección de HTML (id="sec-pasados")
+   y todo su JS quedaron comentados más abajo, no borrados. */
 const SECCIONES_ADMIN = [
-  { clave:"resumen",        titulo:"Resumen" },
-  { clave:"eventos",        titulo:"Eventos" },
-  { clave:"compradores",    titulo:"Compradores" },
-  { clave:"usuarios",       titulo:"Usuarios" },
-  { clave:"equipo",         titulo:"Equipo" },
-  { clave:"patrocinadores", titulo:"Patrocinadores" }
+  { clave:"resumen",        titulo:"Resumen",        roles:["admin","encargado"] },
+  { clave:"eventos",        titulo:"Eventos",        roles:["admin","encargado"] },
+  { clave:"compradores",    titulo:"Compradores",    roles:["admin","encargado"] },
+  { clave:"usuarios",       titulo:"Usuarios",       roles:["admin"] },
+  { clave:"equipo",         titulo:"Equipo",         roles:["admin"] },
+  { clave:"patrocinadores", titulo:"Patrocinadores", roles:["admin"] }
 ];
 let SECCION_ADMIN = "resumen";
 
+function puedeVerSeccion(clave){
+  const s = SECCIONES_ADMIN.find(x => x.clave === clave);
+  return !!s && s.roles.includes(ROL);
+}
+// Primera sección que este rol sí puede abrir (a dónde cae al entrar)
+function seccionInicial(){
+  const s = SECCIONES_ADMIN.find(x => x.roles.includes(ROL));
+  return s ? s.clave : null;
+}
+
 function aplicarRol(){
-  const esAdmin = ROL === "admin";
   // Ojo: además de la sección hay que esconder su botón del sidebar, si no
-  // el staff ve pestañas que lo llevan a un panel vacío.
-  const soloAdmin = [
-    "sec-eventos","sec-usuarios","sec-equipo","sec-patrocinadores","btn-borrar-pend",
-    "nav-eventos","nav-usuarios","nav-equipo","nav-patrocinadores","btn-crear-evento"
-  ];
-  soloAdmin.forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.style.display = esAdmin ? "" : "none";
+  // se ven pestañas que llevan a un panel vacío.
+  SECCIONES_ADMIN.forEach(s=>{
+    const permitida = s.roles.includes(ROL);
+    const sec = document.getElementById("sec-" + s.clave);
+    if(sec) sec.style.display = permitida ? "" : "none";
+    const nav = document.getElementById("nav-" + s.clave);
+    if(nav) nav.style.display = permitida ? "" : "none";
   });
-  // El staff entra por Compradores: Resumen y el resto no son suyos
-  if(!esAdmin && !["resumen","compradores"].includes(SECCION_ADMIN)) SECCION_ADMIN = "compradores";
+  // Crear/editar eventos va con Eventos (el botón "Nuevo evento" vive dentro
+  // de esa sección, así que se esconde con ella); borrar compras es sólo del admin.
+  const btnBorrar = document.getElementById("btn-borrar-pend");
+  if(btnBorrar) btnBorrar.style.display = ROL === "admin" ? "" : "none";
+  if(!puedeVerSeccion(SECCION_ADMIN)) SECCION_ADMIN = seccionInicial();
 }
 
 /* Cambia de pestaña: muestra una sola sección y actualiza el breadcrumb.
@@ -1370,6 +1590,9 @@ function aplicarRol(){
 function mostrarSeccionAdmin(clave){
   const sec = SECCIONES_ADMIN.find(s => s.clave === clave);
   if(!sec) return;
+  // Ocultar el link no alcanza: si alguien llega igual (link viejo, consola),
+  // se le dice por qué no puede y se lo deja en una sección suya.
+  if(!sec.roles.includes(ROL)){ avisarSinPermiso(sec.titulo); return; }
   SECCION_ADMIN = clave;
   // Quién puede ver qué lo decide aplicarRol() con un display inline; acá sólo
   // se marca cuál es la activa, y el inline le gana a la clase si está vedada.
@@ -1381,6 +1604,10 @@ function mostrarSeccionAdmin(clave){
   });
   const titulo = document.getElementById("dash-titulo");
   if(titulo) titulo.textContent = sec.titulo;
+  // Entrar a "Eventos" desde el menú siempre cae en la lista, no en el
+  // detalle que quedó abierto la vez anterior. (nuevoEvento/abrirEventoStudio
+  // llaman a esto y después abren el detalle, así que no se pisan.)
+  if(clave === "eventos"){ EV_DETALLE = null; mostrarVistaEventos("lista"); }
   cerrarSidebar();
   window.scrollTo({top:0});
 }
@@ -1395,29 +1622,81 @@ function marcarSidebar(abierto){
   if(telon) telon.classList.toggle("visible", abierto);
 }
 
-/* "Crear evento" del header: abre Eventos con el formulario en blanco */
+/* "Nuevo evento" (al final de la lista): abre el detalle en modo alta, con
+   el formulario en blanco. Un evento que todavía no existe no tiene
+   analytics, así que ahí no hay tabs: sólo el formulario. */
 function nuevoEvento(){
   mostrarSeccionAdmin("eventos");
+  EV_DETALLE = null;
   resetEventoForm();
-  const form = document.getElementById("ev-form");
-  if(form) form.scrollIntoView({behavior:"smooth", block:"start"});
+  const titulo = document.getElementById("ev-detalle-nombre");
+  if(titulo) titulo.textContent = "Nuevo evento";
+  const acciones = document.getElementById("ev-detalle-acciones");
+  if(acciones) acciones.innerHTML = "";
+  const tabs = document.getElementById("ev-tabs");
+  if(tabs) tabs.style.display = "none";
+  mostrarVistaEventos("detalle");
+  mostrarTabEvento("editar");
   const nombre = document.getElementById("ev-nombre");
   if(nombre) nombre.focus({preventScroll:true});
 }
+/* Sin permiso para entrar al Studio: en vez de dejarlo mirando un panel
+   vacío (o de sólo esconderle los links), se le explica y se lo manda a
+   donde sí puede entrar. Lo usa el escáner al abrir /admin. */
+function bloquearStudio(mensaje, destino, textoBoton){
+  const login = document.getElementById("admin-login");
+  const panel = document.getElementById("admin-panel");
+  const caja  = document.getElementById("admin-sinacceso");
+  if(login) login.style.display = "none";
+  if(panel) panel.style.display = "none";
+  if(!caja){ alert(mensaje); go(destino); return; }
+  const msg = document.getElementById("sinacceso-msg");
+  if(msg) msg.textContent = mensaje;
+  const btn = document.getElementById("sinacceso-btn");
+  if(btn){ btn.textContent = textoBoton; btn.onclick = ()=>go(destino); }
+  caja.style.display = "block";
+  // Se lo lleva solo, pero después de que alcance a leer por qué.
+  setTimeout(()=>{ if(caja.style.display === "block") go(destino); }, 3500);
+}
+/* Sección vedada dentro del panel (el rol sí entra al Studio, pero no ahí) */
+function avisarSinPermiso(titulo){
+  alert(`No tenés permiso para ver "${titulo}". Tu rol es ${ROLES[ROL] ? ROLES[ROL].titulo : "sin acceso"}.`);
+  const inicial = seccionInicial();
+  if(inicial && inicial !== SECCION_ADMIN) mostrarSeccionAdmin(inicial);
+}
+
 // Carga todo el panel según el rol
 async function abrirPanel(){
+  // El escáner no entra al Studio: su lugar es la pantalla de la puerta.
+  if(ROL === "escaner"){
+    bloquearStudio(
+      "Tu cuenta tiene permiso de escáner: podés validar entradas en la puerta, pero no entrar al Studio. Te llevamos al escáner.",
+      "escaner", "Ir al escáner");
+    return;
+  }
+  if(!ROL || !seccionInicial()){
+    bloquearStudio("Tu cuenta no tiene acceso al Studio. Pedile al admin de Bronx que te asigne un rol.",
+      "eventos", "Volver al sitio");
+    return;
+  }
+  const sinacceso = document.getElementById("admin-sinacceso");
+  if(sinacceso) sinacceso.style.display = "none";
   document.getElementById("admin-login").style.display="none";
   // Sin valor: el display lo pone .dash (flex), no un inline
   document.getElementById("admin-panel").style.display="";
   aplicarRol();
-  mostrarSeccionAdmin(SECCION_ADMIN);   // aplicarRol ya lo corrigió si es staff
+  mostrarSeccionAdmin(SECCION_ADMIN);   // aplicarRol ya lo corrigió según el rol
   // Esperamos las compras: renderEventAdmin necesita los conteos por tipo
   await loadPurchases();
-  if(ROL==="admin"){
+  if(puedeVerSeccion("eventos")){
     await cargarTipos(true);   // el panel también edita los tipos pausados
     renderTiposForm();
-    renderEventAdmin(); loadUsuarios(); loadStaff(); loadPatrocinadoresAdmin();
+    renderEventAdmin();
   }
+  // El equipo primero: la tabla de usuarios muestra el rol de cada uno
+  if(puedeVerSeccion("equipo")) await loadEquipo();
+  if(puedeVerSeccion("usuarios")) loadUsuarios();
+  if(puedeVerSeccion("patrocinadores")) loadPatrocinadoresAdmin();
 }
 
 async function login(){
@@ -1472,11 +1751,14 @@ async function login(){
 }
 function logout(){
   logged=false; ADMIN_TOKEN=null; ROL=null;
-  USER=null; borrarSesionUser(); updateNavUser();
+  MI_COLAB=null; MIS_ROLES=[]; COLABORADORES=[]; EQ=null;
+  USER=null; CK=null; borrarSesionUser(); updateNavUser();
   document.getElementById("email").value="";
   document.getElementById("pass").value="";
   document.getElementById("admin-login").style.display="block";
   document.getElementById("admin-panel").style.display="none";
+  const sinacceso = document.getElementById("admin-sinacceso");
+  if(sinacceso) sinacceso.style.display="none";
 }
 // Al cargar la página, si hay sesión guardada, verificarla y reentrar solo
 async function restoreAdminSession(){
@@ -1508,46 +1790,92 @@ function progresoEvento(ev){
   const pct = cupo ? Math.min(100, Math.round(vendidas / cupo * 100)) : null;
   return { tipos, vendidas, cupo, pct };
 }
+/* ---------- EVENTOS DEL STUDIO: LISTA ⇄ DETALLE ----------
+   "Eventos" tiene dos vistas: la lista de tarjetas simples (nombre, fecha,
+   estado) y el detalle de un evento con dos tabs, Analytics y Editar. El
+   formulario de siempre vive adentro del tab Editar; no se duplicó nada.
+   EV_DETALLE es el id del evento abierto (null = lista, o alta nueva). */
+let EV_DETALLE = null;
+let EV_TAB = "analytics";
+
+// Estado que se muestra en la tarjeta de la lista
+function estadoEvento(ev){
+  if(ev.activo === false) return { txt:"Borrador", clase:"borrador" };
+  if(eventoAgotado(ev))   return { txt:"Agotado",  clase:"agotado" };
+  if(sinVenta(ev))        return { txt:"Sin entradas cargadas", clase:"sinventa" };
+  return { txt:"En venta", clase:"venta" };
+}
+
 function renderEventAdmin(){
   const list = document.getElementById("ev-admin-list");
+  if(!list) return;
   const aviso = (!DEMO && !VENTAS_VISTA_OK)
     ? `<p class="err" style="display:block;margin-bottom:14px">Falta crear la vista <b>ventas_por_tipo</b> en Supabase (sql/03-vistas.sql). Los números de acá abajo son correctos, pero en la página pública los cupos no se van a cerrar solos hasta que la crees.</p>`
     : "";
-  if(EVENTS.length===0){ list.innerHTML = aviso + `<p style="color:var(--text-dim);font-size:14px">No hay eventos. Creá el primero abajo.</p>`; return; }
+  if(EVENTS.length===0){
+    list.innerHTML = aviso + `<p style="color:var(--text-dim);font-size:14px">Todavía no hay eventos. Creá el primero con el botón de abajo.</p>`;
+    return;
+  }
   list.innerHTML = aviso + EVENTS.map(ev=>{
-    const { tipos, vendidas, cupo, pct } = progresoEvento(ev);
-    let progreso;
-    if(tipos.length === 0){
-      progreso = `<p class="evento-card-progreso-txt sutil">Sin tipos de entrada cargados</p>`;
-    } else if(cupo != null){
-      progreso = `
-        <div class="evento-card-progreso-track"><div class="evento-card-progreso-fill" style="width:${pct}%"></div></div>
-        <p class="evento-card-progreso-txt">${vendidas}/${cupo} vendidas</p>`;
-    } else {
-      progreso = `<p class="evento-card-progreso-txt">${vendidas} vendida${vendidas===1?"":"s"}</p>`;
-    }
-    const badges = [
-      eventoAgotado(ev) ? `<span class="pill" style="border-color:var(--accent);color:var(--accent)">Agotado</span>` : "",
-      ev.ubicacion_secreta ? `<span class="pill">Secreta</span>` : ""
-    ].filter(Boolean).join(" ");
+    const est = estadoEvento(ev);
+    const { vendidas } = progresoEvento(ev);
     return `
-    <article class="evento-card">
-      <div class="evento-card-portada" ${ev.foto_url ? `style="background-image:url('${ev.foto_url}')"` : ""}></div>
-      <div class="evento-card-body">
-        <div class="evento-card-head">
-          <h4>${esc(ev.nombre)}</h4>
-          ${badges}
-        </div>
-        <p class="evento-card-fecha">${esc(ev.fecha_texto || "Sin fecha cargada")}</p>
-        <div class="evento-card-progreso">${progreso}</div>
-        <div class="evento-card-acciones">
-          <button class="btn ghost btn-mini" onclick="editEvento(${ev.id})">Editar</button>
-          <button class="btn ghost btn-mini" onclick="duplicarEvento(${ev.id})">Duplicar</button>
-          <button class="btn ghost btn-mini" onclick="verEventoPublico(${ev.id})">Ver</button>
-          <button class="btn ghost btn-mini" onclick="deleteEvento(${ev.id})" style="border-color:rgba(239,68,68,.4);color:#ef4444">Borrar</button>
-        </div>
-      </div>
-    </article>`;}).join("");
+    <button class="ev-item" onclick="abrirEventoStudio(${ev.id})">
+      <span class="ev-item-portada" ${ev.foto_url ? `style="background-image:url('${esc(ev.foto_url)}')"` : ""}></span>
+      <span class="ev-item-info">
+        <b class="ev-item-nombre">${esc(ev.nombre)}</b>
+        <span class="ev-item-fecha">${esc(ev.fecha_texto || "Sin fecha cargada")}</span>
+        <span class="ev-item-meta">${vendidas} vendida${vendidas===1?"":"s"}</span>
+      </span>
+      <span class="ev-item-estado ${est.clase}">${est.txt}</span>
+    </button>`;}).join("");
+}
+
+/* Abre el detalle de un evento: carga el formulario (tab Editar) y dibuja
+   los analytics, que arrancan en el tab visible por defecto. */
+function abrirEventoStudio(id){
+  const ev = EVENTS.find(e => e.id === id);
+  if(!ev) return;
+  EV_DETALLE = id;
+  editEvento(id);                 // deja el formulario del tab Editar cargado
+  const titulo = document.getElementById("ev-detalle-nombre");
+  if(titulo) titulo.textContent = ev.nombre || "Evento";
+  // Ver / Duplicar / Borrar vivían en la tarjeta de la lista; ahora que la
+  // tarjeta abre el evento, sus acciones van acá arriba.
+  const acciones = document.getElementById("ev-detalle-acciones");
+  if(acciones) acciones.innerHTML = `
+    <button class="btn ghost btn-mini" onclick="verEventoPublico(${ev.id})">Ver página</button>
+    <button class="btn ghost btn-mini" onclick="duplicarEvento(${ev.id})">Duplicar</button>
+    <button class="btn ghost btn-mini" onclick="deleteEvento(${ev.id})" style="border-color:rgba(239,68,68,.4);color:#ef4444">Borrar</button>`;
+  const tabs = document.getElementById("ev-tabs");
+  if(tabs) tabs.style.display = "";
+  mostrarVistaEventos("detalle");
+  mostrarTabEvento("analytics");
+}
+function volverAListaEventos(){
+  EV_DETALLE = null;
+  resetEventoForm();
+  renderEventAdmin();
+  mostrarVistaEventos("lista");
+}
+function mostrarVistaEventos(cual){
+  const lista = document.getElementById("ev-vista-lista");
+  const detalle = document.getElementById("ev-vista-detalle");
+  if(lista) lista.style.display = cual === "lista" ? "" : "none";
+  if(detalle) detalle.style.display = cual === "detalle" ? "" : "none";
+  window.scrollTo({top:0});
+}
+function mostrarTabEvento(tab){
+  EV_TAB = tab;
+  const panA = document.getElementById("ev-pane-analytics");
+  const panE = document.getElementById("ev-pane-editar");
+  if(panA) panA.style.display = tab === "analytics" ? "" : "none";
+  if(panE) panE.style.display = tab === "editar" ? "" : "none";
+  const tabA = document.getElementById("ev-tab-analytics");
+  const tabE = document.getElementById("ev-tab-editar");
+  if(tabA) tabA.classList.toggle("activo", tab === "analytics");
+  if(tabE) tabE.classList.toggle("activo", tab === "editar");
+  if(tab === "analytics") renderAnalyticsEvento();
 }
 // Abre la página pública del evento en una pestaña nueva, tal cual la ve un comprador
 function verEventoPublico(id){
@@ -1568,6 +1896,17 @@ function duplicarEvento(id){
   TIPOS_FORM.forEach(t => t.id = null);
   document.getElementById("form-title").textContent = "Duplicando evento — revisá y guardá";
   document.getElementById("ev-save-btn").textContent = "Guardar evento";
+  // La copia todavía no existe: no tiene analytics propios, así que queda
+  // igual que un alta nueva (sólo formulario, sin tabs).
+  EV_DETALLE = null;
+  const titulo = document.getElementById("ev-detalle-nombre");
+  if(titulo) titulo.textContent = "Duplicar evento";
+  const acciones = document.getElementById("ev-detalle-acciones");
+  if(acciones) acciones.innerHTML = "";
+  const tabs = document.getElementById("ev-tabs");
+  if(tabs) tabs.style.display = "none";
+  mostrarVistaEventos("detalle");
+  mostrarTabEvento("editar");
 }
 
 /* ---------- Gestor de tipos de entrada ----------
@@ -1829,14 +2168,13 @@ async function saveEvento(){
     };
     const id = document.getElementById("ev-id").value;
     const nombreViejo = id ? (EVENTS.find(e=>e.id==id)||{}).nombre : null;
+    let eventoId = id;
     if(DEMO){
-      let eventoId = id;
       if(id){ Object.assign(EVENTS.find(e=>e.id==id), data); }
       else { data.id = Date.now(); data.activo=true; EVENTS.push(data); eventoId = data.id; }
       sincronizarTiposDemo(eventoId);
     } else {
       // Los tipos necesitan el id del evento, así que el evento se guarda primero
-      let eventoId = id;
       if(id){ await dbUpdate("eventos", id, data); }
       else {
         const creado = await dbInsert("eventos", data);
@@ -1847,8 +2185,13 @@ async function saveEvento(){
       EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
       await cargarTipos(true);
     }
+    renderEventAdmin(); loadEvents();
+    // Se queda en el detalle del evento guardado (recargado con lo que quedó
+    // en la base), no en un formulario en blanco: si acabás de crearlo, lo
+    // normal es querer ver sus analytics o seguir tocándolo.
+    const guardado = EVENTS.find(e => String(e.id) === String(eventoId));
+    if(guardado) abrirEventoStudio(guardado.id);
     ok.textContent = id ? "Evento actualizado." : "Evento creado."; ok.style.display="block";
-    resetEventoForm(); renderEventAdmin(); loadEvents();
   }catch(e){
     err.textContent = "Error al guardar: " + e.message; err.style.display="block";
   }
@@ -1884,7 +2227,247 @@ async function deleteEvento(id){
       await cargarTipos(true);
     }
     renderEventAdmin(); loadEvents();
+    // El evento que estabas mirando ya no existe: vuelta a la lista
+    volverAListaEventos();
   }catch(e){ alert("No se pudo borrar: " + e.message); }
+}
+
+/* ================== ANALYTICS DE UN EVENTO ==================
+   Todo sale de datos que ya existen: PURCHASES (compras aprobadas de ese
+   evento) y evento_vistas (sql/evento-vistas.sql). Sin ventas todavía, los
+   KPIs muestran $0 / 0 — nunca datos inventados ni un error. */
+let VISTAS_EVENTO = [];       // [{fecha}] del evento abierto
+let VISTAS_EVENTO_ID = null;  // de qué evento son las de arriba
+
+// Las compras aprobadas de un evento. Se busca por id y, para las compras
+// viejas que sólo guardaron el nombre, también por nombre.
+function comprasDeEvento(ev){
+  return PURCHASES.filter(c=>{
+    if(!esAprobada(c)) return false;
+    if(c.evento_id != null) return String(c.evento_id) === String(ev.id);
+    return (c.evento || "") === (ev.nombre || "");
+  });
+}
+async function cargarVistasEvento(eventoId){
+  if(DEMO){ VISTAS_EVENTO = []; VISTAS_EVENTO_ID = eventoId; return; }
+  try{
+    VISTAS_EVENTO = await dbGet("evento_vistas", `evento_id=eq.${eventoId}&select=fecha&order=fecha.asc`);
+  }catch(e){ VISTAS_EVENTO = []; }   // sin permiso o sin tabla: 0 vistas, no un error
+  VISTAS_EVENTO_ID = eventoId;
+}
+
+function renderAnalyticsEvento(){
+  const ev = EVENTS.find(e => e.id === EV_DETALLE);
+  if(!ev) return;
+  pintarAnalyticsEvento(ev);
+  // Las vistas llegan por su cuenta; cuando están, se repinta con el número
+  // real en vez de dejar el KPI en 0 para siempre.
+  if(VISTAS_EVENTO_ID !== ev.id){
+    cargarVistasEvento(ev.id).then(()=>{
+      if(EV_DETALLE === ev.id && EV_TAB === "analytics") pintarAnalyticsEvento(ev);
+    });
+  }
+}
+
+function pintarAnalyticsEvento(ev){
+  const compras = comprasDeEvento(ev);
+  const facturacion = compras.reduce((a,c) => a + (Number(c.total) || 0), 0);
+  const tickets = compras.length;
+  const vistas = VISTAS_EVENTO_ID === ev.id ? VISTAS_EVENTO.length : 0;
+  const promedio = tickets ? Math.round(facturacion / tickets) : 0;
+
+  const kpis = document.getElementById("ev-kpis");
+  if(kpis) kpis.innerHTML = [
+    { label:"Facturación total", valor:fmt(facturacion) },
+    { label:"Tickets vendidos",  valor:String(tickets) },
+    { label:"Vistas de la página", valor:String(vistas) },
+    { label:"Ticket promedio",   valor:fmt(promedio) }
+  ].map(k => `<div class="kpi"><small>${k.label}</small><b>${esc(k.valor)}</b></div>`).join("");
+
+  pintarTiposAnalytics(ev, compras);
+  pintarChartEvento(ev, compras);
+}
+
+/* Desglose por tipo de ticket, de mayor a menor recaudación. "Disponibles"
+   es el cupo que queda; un tipo sin cupo (cantidad null) no tiene ni tope ni
+   porcentaje, así que muestra "Sin límite" y un guion. */
+function pintarTiposAnalytics(ev, compras){
+  const tb = document.getElementById("ev-an-tipos");
+  if(!tb) return;
+  const filas = tiposDeEvento(ev.id).map(t=>{
+    const suyas = compras.filter(c => String(c.tipo_ticket_id) === String(t.id)
+      || (c.tipo_ticket_id == null && (c.tipo || "") === (t.nombre || "")));
+    const vendidos = suyas.length;
+    const recaudado = suyas.reduce((a,c) => a + (Number(c.total) || 0), 0);
+    const cupo = t.cantidad == null ? null : Number(t.cantidad);
+    return { nombre:t.nombre || "—", vendidos, recaudado, cupo,
+             disponibles: cupo == null ? null : Math.max(0, cupo - vendidos),
+             pct: cupo ? Math.min(100, Math.round(vendidos / cupo * 100)) : null };
+  }).sort((a,b) => b.recaudado - a.recaudado);
+
+  if(!filas.length){
+    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px">Este evento todavía no tiene tipos de entrada cargados.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = filas.map(f => `
+    <tr>
+      <td data-label="Tipo" class="tabla-tipos-nombre"><b>${esc(f.nombre)}</b></td>
+      <td data-label="Vendidos">${f.vendidos}</td>
+      <td data-label="Disponibles">${f.disponibles == null ? "Sin límite" : f.disponibles}</td>
+      <td data-label="% vendido">${f.pct == null ? "—" : `
+        <span class="an-pct">
+          <span class="an-pct-track"><span class="an-pct-fill" style="width:${f.pct}%"></span></span>
+          <span class="an-pct-num">${f.pct}%</span>
+        </span>`}</td>
+      <td data-label="Recaudación"><b style="color:var(--accent)">${fmt(f.recaudado)}</b></td>
+    </tr>`).join("");
+}
+
+/* ---------- Gráfico: ventas (área, $) + visitas (línea, cantidad) ----------
+   Un día por punto, desde que se publicó el evento hasta hoy. Dos escalas
+   independientes: la plata y las visitas no comparten unidad, así que cada
+   serie se normaliza contra su propio máximo (por eso los dos ejes Y). */
+function serieEventoDiaria(ev, compras){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const desde = new Date(ev.creado_en || hoy); desde.setHours(0,0,0,0);
+  // Tope de 90 días para que el gráfico no se vuelva ilegible ni pesado
+  const dias = Math.min(90, Math.max(1, Math.round((hoy - desde) / 86400000) + 1));
+  const buckets = [];
+  for(let i = dias - 1; i >= 0; i--){
+    const fecha = new Date(hoy); fecha.setDate(fecha.getDate() - i);
+    buckets.push({ fecha, ventas:0, visitas:0 });
+  }
+  const porDia = new Map(buckets.map(b => [b.fecha.toDateString(), b]));
+  compras.forEach(c=>{
+    if(!c.creado_en) return;
+    const d = new Date(c.creado_en); d.setHours(0,0,0,0);
+    const b = porDia.get(d.toDateString());
+    if(b) b.ventas += Number(c.total) || 0;
+  });
+  (VISTAS_EVENTO_ID === ev.id ? VISTAS_EVENTO : []).forEach(v=>{
+    if(!v.fecha) return;
+    const d = new Date(v.fecha); d.setHours(0,0,0,0);
+    const b = porDia.get(d.toDateString());
+    if(b) b.visitas += 1;
+  });
+  return buckets;
+}
+
+function pintarChartEvento(ev, compras){
+  const cont = document.getElementById("ev-an-chart");
+  if(!cont) return;
+  const buckets = serieEventoDiaria(ev, compras);
+  CHART_EVENTO = buckets;   // lo lee el tooltip
+
+  const totalVentas = buckets.reduce((a,b) => a + b.ventas, 0);
+  const totalVisitas = buckets.reduce((a,b) => a + b.visitas, 0);
+  const caption = document.getElementById("ev-an-chart-caption");
+  if(caption) caption.textContent =
+    `${buckets.length} día${buckets.length===1?"":"s"} desde que se publicó · ${fmt(totalVentas)} vendidos · ${totalVisitas} visita${totalVisitas===1?"":"s"}`;
+
+  if(!totalVentas && !totalVisitas){
+    cont.innerHTML = `<p class="loading" style="padding:32px 0">Todavía no hay ventas ni visitas para graficar.</p>`;
+    return;
+  }
+
+  const W = 720, H = 220, padT = 14, padB = 28, padL = 46, padR = 44;
+  const n = buckets.length;
+  const maxV = Math.max(1, ...buckets.map(b => b.ventas));
+  const maxU = Math.max(1, ...buckets.map(b => b.visitas));
+  const xAt = i => padL + (W - padL - padR) * (n === 1 ? 0.5 : i / (n - 1));
+  const yV = v => padT + (H - padT - padB) * (1 - v / maxV);
+  const yU = v => padT + (H - padT - padB) * (1 - v / maxU);
+  const base = padT + (H - padT - padB);
+
+  const lineaV = buckets.map((b,i) => `${xAt(i).toFixed(1)},${yV(b.ventas).toFixed(1)}`).join(" ");
+  const areaV = `${xAt(0).toFixed(1)},${base.toFixed(1)} ${lineaV} ${xAt(n-1).toFixed(1)},${base.toFixed(1)}`;
+  const lineaU = buckets.map((b,i) => `${xAt(i).toFixed(1)},${yU(b.visitas).toFixed(1)}`).join(" ");
+  const corta = d => d.toLocaleDateString("es-AR", {day:"numeric", month:"short"});
+  // Una banda invisible por día: es lo que capta el hover para el tooltip.
+  const ancho = (W - padL - padR) / Math.max(1, n - 1 || 1);
+  const bandas = buckets.map((b,i) => `<rect class="ev-chart-banda" x="${(xAt(i) - ancho/2).toFixed(1)}" y="${padT}" width="${ancho.toFixed(1)}" height="${(base - padT).toFixed(1)}" data-i="${i}"/>`).join("");
+
+  cont.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" class="ev-chart-svg" role="img"
+         aria-label="Ventas y visitas por día desde que se publicó el evento">
+      <line x1="${padL}" y1="${base}" x2="${W-padR}" y2="${base}" class="resumen-chart-base"/>
+      <polygon points="${areaV}" class="resumen-chart-area"/>
+      <polyline points="${lineaV}" class="resumen-chart-linea"/>
+      <polyline points="${lineaU}" class="ev-chart-visitas"/>
+      <text x="4" y="${padT+8}" class="resumen-chart-label">${esc(fmt(maxV))}</text>
+      <text x="4" y="${base}" class="resumen-chart-label">$0</text>
+      <text x="${W-4}" y="${padT+8}" text-anchor="end" class="resumen-chart-label visitas">${maxU}</text>
+      <text x="${W-4}" y="${base}" text-anchor="end" class="resumen-chart-label visitas">0</text>
+      <text x="${padL}" y="${H-6}" class="resumen-chart-label">${esc(corta(buckets[0].fecha))}</text>
+      <text x="${W-padR}" y="${H-6}" text-anchor="end" class="resumen-chart-label">${esc(corta(buckets[n-1].fecha))}</text>
+      <line class="ev-chart-guia" id="ev-chart-guia" x1="0" y1="${padT}" x2="0" y2="${base}" style="display:none"/>
+      ${bandas}
+    </svg>
+    <div class="ev-chart-tooltip" id="ev-chart-tooltip" style="display:none"></div>`;
+
+  // Tooltip: se mueve por las bandas invisibles y muestra los dos valores.
+  cont.querySelectorAll(".ev-chart-banda").forEach(banda=>{
+    banda.addEventListener("mouseenter", ()=> mostrarTooltipChart(cont, Number(banda.dataset.i), xAt(Number(banda.dataset.i)), W));
+    banda.addEventListener("mouseleave", ()=> ocultarTooltipChart(cont));
+  });
+}
+let CHART_EVENTO = [];
+function mostrarTooltipChart(cont, i, x, W){
+  const b = CHART_EVENTO[i];
+  if(!b) return;
+  const tip = cont.querySelector("#ev-chart-tooltip");
+  const guia = cont.querySelector("#ev-chart-guia");
+  if(guia){ guia.setAttribute("x1", x); guia.setAttribute("x2", x); guia.style.display = ""; }
+  if(!tip) return;
+  tip.innerHTML = `<b>${esc(b.fecha.toLocaleDateString("es-AR",{day:"numeric",month:"short"}))}</b>
+    <span class="tip-ventas">${fmt(b.ventas)} vendidos</span>
+    <span class="tip-visitas">${b.visitas} visita${b.visitas===1?"":"s"}</span>`;
+  tip.style.left = (x / W * 100) + "%";
+  tip.style.display = "block";
+}
+function ocultarTooltipChart(cont){
+  const tip = cont.querySelector("#ev-chart-tooltip");
+  const guia = cont.querySelector("#ev-chart-guia");
+  if(tip) tip.style.display = "none";
+  if(guia) guia.style.display = "none";
+}
+
+/* CSV de todas las ventas del evento. Una línea por orden y tipo (no por QR):
+   así "cantidad" y "monto" son los de la venta, que es lo que se mira en una
+   planilla. Las compras viejas sin `grupo` quedan cada una en su línea. */
+function descargarVentasEvento(){
+  const ev = EVENTS.find(e => e.id === EV_DETALLE);
+  if(!ev) return;
+  const compras = comprasDeEvento(ev);
+  if(!compras.length){ alert("Este evento todavía no tiene ventas aprobadas para exportar."); return; }
+
+  const ordenes = new Map();
+  compras.forEach(c=>{
+    const clave = (c.grupo || ("fila-" + c.id)) + "|" + (c.tipo_ticket_id || c.tipo || "");
+    const prev = ordenes.get(clave);
+    if(prev){ prev.cantidad += 1; prev.monto += Number(c.total) || 0; return; }
+    ordenes.set(clave, {
+      fecha: c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR") : "",
+      comprador: [c.comprador_nombre || c.nombre || "", c.comprador_apellido || c.apellido || ""].join(" ").trim(),
+      email: c.email || "",
+      dni: c.comprador_documento || c.documento || "",
+      tipo: nombreTipo(c),
+      cantidad: 1,
+      monto: Number(c.total) || 0,
+      estado: c.estado || "aprobado"
+    });
+  });
+
+  const limpiar = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const head = ["Fecha","Comprador","Email","DNI","Tipo de ticket","Cantidad","Monto","Estado"].join(",");
+  const body = [...ordenes.values()]
+    .map(o => [o.fecha, o.comprador, o.email, o.dni, o.tipo, o.cantidad, o.monto, o.estado].map(limpiar).join(","))
+    .join("\n");
+  const blob = new Blob(["﻿" + head + "\n" + body], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ventas-" + (ev.nombre || "evento").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") + ".csv";
+  a.click();
 }
 
 /* ================== ADMIN: COMPRADORES ================== */
@@ -1997,29 +2580,39 @@ function dibujarResumenTipos(rows){
 }
 function drawAdmin(){
   const rows = filasFiltradas();
+  // data-label en cada <td>: en desktop no se usan (la tabla es la de
+  // siempre), pero en mobile el CSS los vuelve la etiqueta de cada renglón
+  // cuando la fila pasa a tarjeta apilada (ver .tabla-compras en la MÓVIL).
   document.getElementById("tbody").innerHTML = rows.map((c,i)=>`
     <tr>
-      <td style="color:var(--text-dim)">${i+1}</td>
-      <td style="color:var(--text-dim);font-size:12px">${c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
-      <td>${esc(c.nombre)}</td><td>${esc(c.apellido)}</td><td>${esc(c.evento)}</td>
-      <td>${esc(nombreTipo(c))}</td>
-      <td>${fmt(c.total)}</td>
-      <td>${estadoPill(c.estado)}</td>
-      <td>${c.usada ? '<span class="pill" style="border-color:#22c55e;color:#22c55e">Sí</span>' : '<span style="color:var(--text-faint)">—</span>'}</td>
-      <td style="font-size:12px">${esc(c.codigo)}</td>
+      <td data-label="#" style="color:var(--text-dim)">${i+1}</td>
+      <td data-label="Fecha compra" style="color:var(--text-dim);font-size:12px">${c.creado_en ? new Date(c.creado_en).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+      <td data-label="Nombre">${esc(c.nombre)}</td><td data-label="Apellido">${esc(c.apellido)}</td>
+      <td data-label="Evento">${esc(c.evento)}</td>
+      <td data-label="Tipo" class="tabla-compras-tipo">${esc(nombreTipo(c))}</td>
+      <td data-label="Precio">${fmt(c.total)}</td>
+      <td data-label="Estado">${estadoPill(c.estado)}</td>
+      <td data-label="Ingresó">${c.usada ? '<span class="pill" style="border-color:#22c55e;color:#22c55e">Sí</span>' : '<span style="color:var(--text-faint)">—</span>'}</td>
+      <td data-label="Código" style="font-size:12px">${esc(c.codigo)}</td>
     </tr>`).join("") || `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:28px">Sin compras con estos filtros</td></tr>`;
 
   dibujarResumenTipos(rows);
 
-  // Línea de resumen de lo que se está viendo ahora
+  // Línea de resumen de lo que se está viendo ahora. Cada dato va en su
+  // propio <span> (nowrap) para que en mobile el salto de línea caiga
+  // entre datos, no a mitad de uno.
   const s = totales(rows);
   const res = document.getElementById("resumen-filtro");
   if(res){
     const filtrando = rows.length !== PURCHASES.length;
-    res.innerHTML = `Mostrando <b>${rows.length}</b> de ${PURCHASES.length} compras`
-      + (filtrando ? " (filtrado)" : "")
-      + ` · <b>${s.entradas}</b> aprobadas · <b>${s.compradores}</b> compradores · recaudado <b style="color:var(--accent)">${fmt(s.recaudado)}</b>`
-      + ` · ingresaron <b>${s.ingresados}</b>`;
+    const chips = [
+      `Mostrando <b>${rows.length}</b> de ${PURCHASES.length} compras${filtrando ? " (filtrado)" : ""}`,
+      `<b>${s.entradas}</b> aprobadas`,
+      `<b>${s.compradores}</b> compradores`,
+      `recaudado <b style="color:var(--accent)">${fmt(s.recaudado)}</b>`,
+      `ingresaron <b>${s.ingresados}</b>`
+    ];
+    res.innerHTML = chips.map(c => `<span class="resumen-filtro-item">${c}</span>`).join("");
   }
 }
 // Borra TODAS las compras pendientes (limpieza manual del admin)
@@ -2147,7 +2740,8 @@ async function loadUsuarios(){
   try{
     USUARIOS = await dbGet("perfiles", "order=creado_en.desc");
   }catch(e){ USUARIOS = []; }
-  try{ STAFF = await dbGet("staff", "order=creado_en.asc"); }catch(e){ STAFF=[]; }
+  // La tabla muestra el rol de cada uno, así que necesita el equipo cargado
+  if(!COLABORADORES.length) await loadEquipo();
   drawUsuarios();
 }
 function drawUsuarios(){
@@ -2161,7 +2755,7 @@ function drawUsuarios(){
       <td style="color:var(--text-dim);font-size:12px">${u.creado_en ? new Date(u.creado_en).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}</td>
       <td>${esc(u.nombre||"—")}</td><td>${esc(u.apellido||"—")}</td>
       <td>${esc(u.telefono||"—")}</td><td style="font-size:13px">${esc(u.email||"—")}</td>
-      <td>${botonStaff(u.email)}</td>
+      <td>${botonEquipoUsuario(u)}</td>
     </tr>`).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:28px">Sin usuarios registrados todavía</td></tr>`;
 }
 function exportUsuariosCSV(){
@@ -2174,60 +2768,268 @@ function exportUsuariosCSV(){
 
 
 
-/* ================== EQUIPO (acceso solo al escáner) ================== */
-function esStaff(email){ return STAFF.some(s => (s.email||"").toLowerCase() === (email||"").toLowerCase()); }
-function botonStaff(email){
-  if(!email) return "—";
-  if((email||"").toLowerCase() === ADMIN_EMAIL.toLowerCase()) return `<span class="pill-estado aprobado">Admin</span>`;
-  return esStaff(email)
-    ? `<button class="btn ghost btn-mini" onclick="toggleStaff('${email}')">Quitar escáner</button>`
-    : `<button class="btn btn-mini" onclick="toggleStaff('${email}')">Dar escáner</button>`;
-}
-async function toggleStaff(email){
+/* ================== EQUIPO: COLABORADORES Y ROLES ==================
+   Sólo para el admin (SECCIONES_ADMIN). Una tarjeta cuadrada por
+   colaborador; al tocarla se abre el detalle, donde se cambia el rol, el
+   alcance (todos los eventos o algunos), y si está activo.
+
+   El alcance sale de colaborador_rol.evento_id: null = todos los eventos,
+   un id = sólo ese. Guardar un rol borra las filas anteriores de esa
+   persona y escribe las nuevas — una persona, un rol (con su alcance). */
+let COLABORADORES = [];
+
+async function loadEquipo(){
+  if(DEMO){ COLABORADORES = DEMO_COLABORADORES.map(c=>({...c})); drawEquipo(); return; }
   try{
-    const s = STAFF.find(x => (x.email||"").toLowerCase() === email.toLowerCase());
-    if(s){
-      if(!confirm(email + " va a perder el acceso al escáner. ¿Seguro?")) return;
-      await dbDelete("staff", s.id);
-    } else {
-      await dbInsert("staff", { email: email.toLowerCase() });
-      alert("Listo. " + email + " ya puede entrar a /admin con su cuenta y usar el escáner.");
-    }
-    await loadStaff();
-    drawUsuarios();
-  }catch(e){ alert("No se pudo: " + e.message); }
+    COLABORADORES = await dbGet("colaboradores",
+      "select=id,nombre,email,telefono,foto_url,activo,creado_en,colaborador_rol(id,rol,evento_id)&order=creado_en.asc");
+  }catch(e){ COLABORADORES = []; }
+  drawEquipo();
+}
+// El rol que manda, si tuviera más de uno cargado
+function rolPrincipal(c){
+  const roles = c.colaborador_rol || [];
+  return ROL_ORDEN.find(r => roles.some(x => x.rol === r)) || null;
+}
+// Ids de eventos del rol principal ([] = todos los eventos)
+function eventosDeRol(c){
+  const rol = rolPrincipal(c);
+  return (c.colaborador_rol || [])
+    .filter(x => x.rol === rol && x.evento_id != null)
+    .map(x => x.evento_id);
+}
+function alcanceTexto(c){
+  const ids = eventosDeRol(c);
+  if(!ids.length) return "Todos los eventos";
+  if(ids.length === 1){
+    const ev = EVENTS.find(e => e.id === ids[0]);
+    return ev ? ev.nombre : "1 evento";
+  }
+  return ids.length + " eventos";
+}
+function inicialDe(c){ return ((c.nombre||c.email||"?").trim()[0] || "?").toUpperCase(); }
+
+function drawEquipo(){
+  const box = document.getElementById("equipo-grid");
+  if(!box) return;
+  if(!COLABORADORES.length){
+    box.innerHTML = `<p style="color:var(--text-dim);font-size:14px">Todavía no hay nadie en el equipo. Agregá al primero con el botón de arriba.</p>`;
+    return;
+  }
+  box.innerHTML = COLABORADORES.map(c=>{
+    const rol = rolPrincipal(c);
+    const avatar = c.foto_url
+      ? `<img src="${esc(c.foto_url)}" alt="">`
+      : esc(inicialDe(c));
+    return `<button class="colab-card${c.activo ? "" : " inactivo"}" onclick="abrirColaborador(${c.id})">
+      <span class="colab-avatar">${avatar}</span>
+      <span class="colab-nombre">${esc(c.nombre || c.email)}</span>
+      ${rol
+        ? `<span class="colab-rol" data-rol="${rol}">${iconoRol(rol)}${ROLES[rol].titulo}</span>`
+        : `<span class="colab-rol" data-rol="ninguno">Sin rol</span>`}
+      <span class="colab-alcance">${esc(alcanceTexto(c))}</span>
+      ${c.activo ? "" : `<span class="colab-tag">Inactivo</span>`}
+    </button>`;
+  }).join("");
 }
 
-let STAFF = [];
-async function loadStaff(){
-  if(DEMO) return;
-  try{ STAFF = await dbGet("staff", "order=creado_en.asc"); }catch(e){ STAFF=[]; }
-  drawStaff();
+/* ---------- Detalle / alta (modal) ----------
+   EQ es el borrador que se está editando; null = modal cerrado. Igual que
+   en el checkout: los inputs escriben en EQ sin re-renderizar (si no, se
+   pierde el foco a mitad de palabra), y sólo los cambios de estructura
+   (rol, alcance, tildar un evento) vuelven a dibujar. */
+let EQ = null;
+
+function abrirColaborador(id){
+  const c = COLABORADORES.find(x => x.id === id);
+  if(!c) return;
+  const ids = eventosDeRol(c);
+  EQ = {
+    nuevo:false, id:c.id,
+    nombre:c.nombre || "", email:c.email || "", telefono:c.telefono || "",
+    activo:!!c.activo,
+    rol: rolPrincipal(c) || "escaner",
+    alcance: ids.length ? "eventos" : "todos",
+    eventos: ids.slice()
+  };
+  renderEquipoModal();
 }
-function drawStaff(){
-  const box = document.getElementById("staff-list");
-  if(!box) return;
-  box.innerHTML = STAFF.map(s=>`
-    <div class="ev-admin-item">
-      <div class="info"><b>${esc(s.email)}</b><span>Puede escanear y ver compradores</span></div>
-      <div class="row-actions"><button class="btn ghost" onclick="quitarStaff(${s.id})">Quitar</button></div>
-    </div>`).join("") || `<p style="color:var(--text-dim);font-size:14px">Todavía no agregaste a nadie al equipo.</p>`;
+function nuevoColaborador(prefill){
+  EQ = {
+    nuevo:true, id:null,
+    nombre:(prefill && prefill.nombre) || "", email:(prefill && prefill.email) || "", telefono:(prefill && prefill.telefono) || "",
+    activo:true, rol:"escaner", alcance:"todos", eventos:[]
+  };
+  renderEquipoModal();
 }
-async function agregarStaff(){
-  const ok = document.getElementById("staff-ok"), err = document.getElementById("staff-err");
-  ok.style.display="none"; err.style.display="none";
-  const email = document.getElementById("staff-email").value.trim().toLowerCase();
-  if(!email || !email.includes("@")){ err.textContent="Poné un email válido."; err.style.display="block"; return; }
+function cerrarEquipoModal(){
+  EQ = null;
+  const ov = document.getElementById("overlay-equipo");
+  if(ov) ov.classList.remove("open");
+}
+function eqCampo(campo, valor){ if(EQ) EQ[campo] = valor; }
+function eqSetRol(rol){ if(!EQ) return; EQ.rol = rol; renderEquipoModal(); }
+function eqSetAlcance(alcance){
+  if(!EQ) return;
+  EQ.alcance = alcance;
+  if(alcance === "todos") EQ.eventos = [];
+  renderEquipoModal();
+}
+function eqToggleEvento(id){
+  if(!EQ) return;
+  EQ.eventos = EQ.eventos.includes(id) ? EQ.eventos.filter(x => x !== id) : EQ.eventos.concat(id);
+  renderEquipoModal();
+}
+function eqSetActivo(valor){ if(!EQ) return; EQ.activo = !!valor; renderEquipoModal(); }
+
+function renderEquipoModal(){
+  const ov = document.getElementById("overlay-equipo");
+  const cuerpo = document.getElementById("equipo-modal-cuerpo");
+  const titulo = document.getElementById("equipo-modal-titulo");
+  if(!ov || !cuerpo || !EQ) return;
+  if(titulo) titulo.textContent = EQ.nuevo ? "Nuevo colaborador" : (EQ.nombre || EQ.email);
+
+  const campo = (id, label, tipo, valor, extra="") => `
+    <div class="ck-campo">
+      <label for="eq-${id}">${label}</label>
+      <input id="eq-${id}" type="${tipo}" value="${esc(valor)}" ${extra}
+             oninput="eqCampo('${id}', this.value)">
+    </div>`;
+
+  cuerpo.innerHTML = `
+    <div class="ck-campos">
+      ${campo("nombre", "Nombre", "text", EQ.nombre)}
+      ${EQ.nuevo
+        ? campo("email", "Email (el de su cuenta en la página)", "email", EQ.email, 'autocomplete="off"')
+        : `<div class="ck-campo"><label>Email</label><p class="eq-fijo">${esc(EQ.email)}</p></div>`}
+      ${campo("telefono", "Teléfono", "tel", EQ.telefono)}
+    </div>
+
+    <h4 class="eq-titulo">Rol</h4>
+    <div class="eq-roles">
+      ${ROL_ORDEN.map(r=>`
+        <button class="eq-rol${EQ.rol === r ? " elegido" : ""}" data-rol="${r}" onclick="eqSetRol('${r}')">
+          <span class="eq-rol-ico">${iconoRol(r)}</span>
+          <b>${ROLES[r].titulo}</b>
+          <span>${ROLES[r].desc}</span>
+        </button>`).join("")}
+    </div>
+
+    <h4 class="eq-titulo">¿Sobre qué eventos?</h4>
+    <div class="eq-alcance">
+      <button class="eq-chip${EQ.alcance === "todos" ? " elegido" : ""}" onclick="eqSetAlcance('todos')">Todos los eventos</button>
+      <button class="eq-chip${EQ.alcance === "eventos" ? " elegido" : ""}" onclick="eqSetAlcance('eventos')">Sólo algunos</button>
+    </div>
+    ${EQ.alcance === "eventos" ? `
+      <div class="eq-eventos">
+        ${EVENTS.length ? EVENTS.map(ev=>`
+          <label class="ck-check">
+            <input type="checkbox" ${EQ.eventos.includes(ev.id) ? "checked" : ""} onchange="eqToggleEvento(${ev.id})">
+            <span>${esc(ev.nombre)}</span>
+          </label>`).join("") : `<p style="color:var(--text-dim);font-size:13px">No hay eventos cargados todavía.</p>`}
+      </div>` : ""}
+
+    <h4 class="eq-titulo">Estado</h4>
+    <label class="ck-check">
+      <input type="checkbox" ${EQ.activo ? "checked" : ""} onchange="eqSetActivo(this.checked)">
+      <span>Activo — si lo desactivás pierde el acceso sin borrar su historial.</span>
+    </label>
+
+    <p class="ck-error" id="eq-err" style="display:none"></p>
+    <div class="ck-pie">
+      ${EQ.nuevo
+        ? `<button class="btn ghost" onclick="cerrarEquipoModal()">Cancelar</button>`
+        : `<button class="btn ghost" onclick="eliminarColaborador(${EQ.id})">Eliminar</button>`}
+      <button class="btn" id="eq-guardar" onclick="guardarColaborador()">${EQ.nuevo ? "Agregar" : "Guardar"}</button>
+    </div>`;
+  ov.classList.add("open");
+}
+
+// Las filas de colaborador_rol que le corresponden al borrador actual
+function eqFilasRol(colaboradorId){
+  if(EQ.alcance === "eventos" && EQ.eventos.length){
+    return EQ.eventos.map(evId => ({ colaborador_id:colaboradorId, rol:EQ.rol, evento_id:evId }));
+  }
+  return [{ colaborador_id:colaboradorId, rol:EQ.rol, evento_id:null }];
+}
+
+async function guardarColaborador(){
+  if(!EQ) return;
+  const err = document.getElementById("eq-err");
+  const fallar = txt => { if(err){ err.textContent = txt; err.style.display = "block"; } };
+  const btn = document.getElementById("eq-guardar");
+
+  if(!EQ.nombre.trim()) return fallar("Poné el nombre.");
+  if(EQ.nuevo && !emailValido(EQ.email)) return fallar("Poné un email válido: tiene que ser el mismo con el que se creó la cuenta en la página.");
+  if(EQ.alcance === "eventos" && !EQ.eventos.length) return fallar("Elegí al menos un evento, o pasalo a “Todos los eventos”.");
+
+  if(btn){ btn.disabled = true; btn.textContent = "Guardando..."; }
   try{
-    await dbInsert("staff", { email });
-    ok.textContent = "Agregado. Esa persona ya puede entrar al panel (tiene que crearse una cuenta en la página con ese email si no la tiene)."; ok.style.display="block";
-    document.getElementById("staff-email").value="";
-    loadStaff();
-  }catch(e){ err.textContent = "No se pudo agregar: "+e.message; err.style.display="block"; }
+    if(DEMO){
+      if(EQ.nuevo){
+        const id = Math.max(0, ...DEMO_COLABORADORES.map(c=>c.id)) + 1;
+        DEMO_COLABORADORES.push({ id, nombre:EQ.nombre, email:EQ.email.toLowerCase(), telefono:EQ.telefono, foto_url:null, activo:EQ.activo, colaborador_rol:eqFilasRol(id) });
+      } else {
+        const c = DEMO_COLABORADORES.find(x=>x.id===EQ.id);
+        if(c){ c.nombre=EQ.nombre; c.telefono=EQ.telefono; c.activo=EQ.activo; c.colaborador_rol=eqFilasRol(c.id); }
+      }
+      cerrarEquipoModal(); loadEquipo(); return;
+    }
+
+    let id = EQ.id;
+    if(EQ.nuevo){
+      const filas = await dbInsert("colaboradores", {
+        nombre:EQ.nombre.trim(), email:EQ.email.trim().toLowerCase(),
+        telefono:EQ.telefono.trim() || null, activo:EQ.activo
+      });
+      id = Array.isArray(filas) && filas[0] ? filas[0].id : null;
+      if(!id) throw new Error("no se pudo crear el colaborador");
+    } else {
+      await dbUpdate("colaboradores", id, {
+        nombre:EQ.nombre.trim(), telefono:EQ.telefono.trim() || null, activo:EQ.activo
+      });
+      // Se reemplazan los roles viejos: una persona, un rol con su alcance
+      const previo = COLABORADORES.find(c => c.id === id);
+      for(const r of (previo && previo.colaborador_rol) || []){
+        if(r.id) await dbDelete("colaborador_rol", r.id);
+      }
+    }
+    for(const fila of eqFilasRol(id)) await dbInsert("colaborador_rol", fila);
+    cerrarEquipoModal();
+    await loadEquipo();
+    drawUsuarios();
+  }catch(e){
+    const dup = (e.message||"").includes("duplicate") || (e.message||"").includes("colaboradores_email_unico");
+    fallar(dup ? "Ese email ya está en el equipo." : "No se pudo guardar: " + e.message);
+  }
+  if(btn){ btn.disabled = false; btn.textContent = EQ && EQ.nuevo ? "Agregar" : "Guardar"; }
 }
-async function quitarStaff(id){
-  if(!confirm("¿Quitar a esta persona del equipo?")) return;
-  try{ await dbDelete("staff", id); loadStaff(); }catch(e){ alert("No se pudo quitar: "+e.message); }
+
+async function eliminarColaborador(id){
+  const c = COLABORADORES.find(x => x.id === id);
+  if(!confirm(`${(c && (c.nombre||c.email)) || "Esta persona"} va a perder todo su acceso. ¿Seguro?\n\nSi es algo temporal, mejor desactivalo.`)) return;
+  try{
+    if(DEMO){ DEMO_COLABORADORES = DEMO_COLABORADORES.filter(x=>x.id!==id); }
+    else await dbDelete("colaboradores", id);   // colaborador_rol se borra en cascada
+    cerrarEquipoModal();
+    await loadEquipo();
+    drawUsuarios();
+  }catch(e){ alert("No se pudo eliminar: " + e.message); }
+}
+
+/* Columna "Equipo" de la tabla de usuarios registrados: si ya es del equipo
+   muestra su rol; si no, el atajo para sumarlo con sus datos ya cargados. */
+function botonEquipoUsuario(u){
+  const email = (u.email||"").toLowerCase();
+  if(!email) return "—";
+  if(email === ADMIN_EMAIL.toLowerCase()) return `<span class="pill-estado aprobado">Admin</span>`;
+  const c = COLABORADORES.find(x => (x.email||"").toLowerCase() === email);
+  if(c){
+    const rol = rolPrincipal(c);
+    return `<button class="btn ghost btn-mini" onclick="abrirColaborador(${c.id})">${rol ? ROLES[rol].titulo : "Sin rol"}</button>`;
+  }
+  const datos = JSON.stringify({ nombre:((u.nombre||"")+" "+(u.apellido||"")).trim(), email, telefono:u.telefono||"" }).replace(/"/g,"&quot;");
+  return `<button class="btn btn-mini" onclick="nuevoColaborador(${datos})">Sumar al equipo</button>`;
 }
 
 /* ================== PATROCINADORES (Studio) ==================
@@ -2907,7 +3709,7 @@ async function userLogin(){
 }
 
 function userLogout(){
-  USER = null; borrarSesionUser(); updateNavUser();
+  USER = null; CK = null; borrarSesionUser(); updateNavUser();
   logged=false; ADMIN_TOKEN=null; ROL=null;
   const f = document.getElementById("auth-forms"), p = document.getElementById("auth-profile");
   if(f && p){ f.style.display="block"; p.style.display="none"; }

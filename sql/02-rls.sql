@@ -12,8 +12,17 @@
 -- ============================================================
 -- QUIÉN ES ADMIN Y QUIÉN ES STAFF
 -- ============================================================
+-- ⚠️ OJO AL ORDEN: `roles-equipo.sql` (que va después de este archivo)
+-- REDEFINE es_admin() y es_staff() para que salgan de las tablas
+-- colaboradores/colaborador_rol en vez de la tabla staff. Estas dos de acá
+-- abajo son la versión vieja: quedan para que una base nueva funcione entre
+-- el paso 2 y el paso 5, pero la definición que manda es la de
+-- roles-equipo.sql. Si volvés a correr este archivo sobre una base ya
+-- migrada, corré roles-equipo.sql de nuevo después.
+--
 -- ⚠️ CAMBIAR ESTE MAIL por el del dueño de Bronx (Nano Rabbione) antes de
--- entregar, y poner el mismo en ADMIN_EMAIL de js/app.js.
+-- entregar, y poner el mismo en ADMIN_EMAIL de js/app.js (y en el es_admin()
+-- de roles-equipo.sql).
 create or replace function public.es_admin()
 returns boolean
 language sql

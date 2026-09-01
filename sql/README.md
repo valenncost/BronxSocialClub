@@ -9,6 +9,8 @@ desde el SQL Editor:
 | 2 | `02-rls.sql` | Row Level Security: quién puede leer y escribir cada tabla |
 | 3 | `03-vistas.sql` | La vista `ventas_por_tipo` (conteo de vendidas, lo único de `compras` que puede leer el público) |
 | 4 | `04-storage.sql` | El bucket `fotos` (portadas de eventos y galería) y sus permisos |
+| 5 | `roles-equipo.sql` | Roles del equipo: tablas `colaboradores` y `colaborador_rol` + las policies de cada rol. **Redefine `es_admin()` y `es_staff()`** de `02-rls.sql`, así que va siempre después |
+| 6 | `evento-vistas.sql` | Tabla `evento_vistas` (visitas a la página de cada evento) para el KPI "Vistas" y el gráfico de Analytics del Studio. Usa `es_encargado()`, así que va después de `roles-equipo.sql` |
 
 Se pueden correr de nuevo sin romper nada: todo es `create ... if not exists` /
 `create or replace` / `drop policy if exists`.
@@ -27,15 +29,38 @@ bases que ya existían antes del cambio.
 
 ## Antes de correrlos: cambiar el mail del admin
 
-En `02-rls.sql` está la función `es_admin()` con el mail del administrador
-**escrito a mano**. Tiene que ser el mismo que la constante `ADMIN_EMAIL` de
-`js/app.js`. Hoy los dos apuntan al mail del desarrollador; antes de entregarle
-el sistema a Bronx hay que poner el de Nano Rabbione **en los dos lados**:
+La función `es_admin()` tiene el mail del administrador **escrito a mano**. Tiene
+que ser el mismo que la constante `ADMIN_EMAIL` de `js/app.js`. Hoy los dos
+apuntan al mail del desarrollador; antes de entregarle el sistema a Bronx hay que
+poner el de Nano Rabbione **en los tres lados**:
 
 - `js/app.js` → `const ADMIN_EMAIL = "..."` (decide qué se ve en el panel)
-- `02-rls.sql` → `es_admin()` (decide qué se puede escribir de verdad)
+- `roles-equipo.sql` → `es_admin()` (la versión vigente, decide qué se puede escribir de verdad)
+- `02-rls.sql` → `es_admin()` (la versión vieja, para que una base nueva no quede con el mail del desarrollador antes de llegar al paso 5)
 
 Si solo cambiás uno, o el panel se ve vacío o alguien ve botones que no funcionan.
+
+Ese mail es admin **aunque no esté en `colaboradores`**: es el bootstrap para que
+el dueño no pueda quedarse afuera de su propio panel por un borrado en la tabla.
+
+## Roles del equipo
+
+Desde `roles-equipo.sql` el acceso al Studio sale de dos tablas:
+
+- `colaboradores` — quién es cada persona del equipo (por email, el mismo con el
+  que se registra en la página), con `activo` para darla de baja sin borrar nada.
+- `colaborador_rol` — qué rol tiene y sobre qué evento. `evento_id` en NULL
+  significa **todos los eventos**; con un id, ese rol vale sólo para ese evento.
+
+| Rol | Puede |
+|---|---|
+| `admin` | Todo el Studio, incluida la pantalla de Equipo y la configuración |
+| `encargado` | Ver y editar eventos (los de su alcance) + compradores y analytics. No gestiona roles ni configuración sensible |
+| `escaner` | Sólo escanear QR en la puerta (leer `compras` y marcarlas usadas) |
+
+La tabla vieja `staff` **queda en la base pero ya no la lee nadie**: sus emails se
+migran a `colaboradores` con rol `escaner` global la primera vez que se corre
+`roles-equipo.sql`. `es_staff()` ahora significa "tiene algún rol en el Studio".
 
 ## Cómo quedan los precios (cambió respecto de torino)
 

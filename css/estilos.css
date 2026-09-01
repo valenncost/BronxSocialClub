@@ -90,6 +90,24 @@ body::before{
 [data-color-evento="violeta"]{--accent:#A855F7;--acento-rgb:168,85,247;--acento-par:#6D28D9}
 [data-color-evento="verde"]  {--accent:#22C55E;--acento-rgb:34,197,94; --acento-par:#15803D}
 
+/* El botón primario (.btn) pinta con --accent-gradient, el degradado fijo
+   de IDENTIDAD de marca (naranja) — correcto en el resto del sitio, pero
+   sql/color-evento.sql (el spec original de esta función) dice explícito
+   que el color por evento "reemplaza al naranja de la marca... en botones,
+   tarjeta de ticket elegida, selector de cantidad, glows" de su página de
+   detalle. El botón se había quedado afuera: .tipo-card.elegida y
+   .tipo-qty .mas ya leían --accent (que si se re-tiñe por evento), pero
+   .btn seguía con el degradado fijo sin importar el color_acento del
+   evento — se notaba en Jueves Picante (rojo) mostrando el botón naranja.
+   Acá se lo re-tiñe SÓLO dentro de un contenedor con data-color-evento
+   (#page-detalle, #overlay) — el degradado de marca en el resto del sitio
+   (hero, tabs, header) no cuelga de ese atributo y no se toca. Para
+   "naranja" el resultado es igual al degradado de marca (mismos dos hex),
+   así que no cambia nada a simple vista en el evento por defecto. */
+[data-color-evento] .btn:not(.ghost):not(:disabled){
+  background:linear-gradient(135deg,var(--accent),var(--acento-par));
+}
+
 ::selection{background:var(--accent);color:#0A0A0A}
 a:focus-visible,button:focus-visible,input:focus-visible,
 textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -544,6 +562,27 @@ body > nav{
 .d-resumen .total.mini{margin:0;padding:4px 0}
 .d-buy-card .btn{width:100%;margin-top:16px}
 
+/* ---------- BARRA FLOTANTE DE COMPRA (detalle de evento) ----------
+   Aparece pegada al fondo apenas hay al menos 1 entrada elegida; se
+   oculta por completo (display:none, no sólo opacity) si la selección
+   vuelve a 0, así no queda un hueco vacío ni intercepta clics. Debajo del
+   overlay del modal (z-index 100) para que la tapa sin gestos extra. */
+.d-floatbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 24px;padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--border);
+  box-shadow:0 -8px 24px rgba(0,0,0,.35);
+}
+.d-floatbar-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.d-floatbar-count{font-size:0.875rem;font-weight:600;color:var(--text)}
+.d-floatbar-total{font-size:0.875rem;color:var(--text-dim)}
+.d-floatbar .btn{width:auto;flex:0 0 auto;padding:12px 28px}
+@media (max-width:640px){
+  .d-floatbar{padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+  .d-floatbar .btn{padding:12px 20px}
+}
+
 /* ---------- MODAL ---------- */
 .overlay{
   position:fixed;inset:0;z-index:100;
@@ -555,8 +594,8 @@ body > nav{
 .modal{
   width:100%;max-width:440px;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
-  padding:24px;max-height:92vh;overflow-y:auto;
-  box-shadow:0 16px 48px rgba(0,0,0,.5);
+  padding:22px;max-height:92vh;overflow-y:auto;
+  box-shadow:0 16px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);
 }
 .modal .mdate{font-size:0.875rem;color:var(--text-dim);margin-bottom:24px}
 .modal h3{margin-bottom:4px}
@@ -576,43 +615,49 @@ body > nav{
    cuerpo lo dibuja renderCheckout() en app.js; acá van los estados.
    Pensado a una columna: en móvil compra el 95% de la gente, así que la
    versión angosta es la de referencia y la de escritorio es la excepción. */
-.modal-checkout{max-width:520px;background:#1A1A1A;border-radius:20px}
+.modal-checkout{max-width:520px;background:#1A1A1A;border-radius:20px;padding:20px}
 
 /* Stepper: círculo numerado por paso, unidos por una línea que se pinta de
    blanco hasta el paso activo y queda gris después. La línea es un ::before
    de cada paso hacia el anterior (por eso el primero no la dibuja), y va
    detrás de los círculos con z-index. */
-.ck-stepper{display:flex;list-style:none;margin:20px 0 28px;padding:0}
+.ck-stepper{display:flex;list-style:none;margin:18px 0 24px;padding:0}
 .ck-step{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;min-width:0}
 .ck-step::before{
-  content:"";position:absolute;top:15px;right:50%;width:100%;height:2px;
+  content:"";position:absolute;top:14px;right:50%;width:100%;height:2px;
   background:#2A2A2A;z-index:0;
 }
 .ck-step:first-child::before{display:none}
 .ck-step.activo::before,.ck-step.hecho::before{background:#FFFFFF}
 .ck-circulo{
   position:relative;z-index:1;
-  width:32px;height:32px;border-radius:999px;flex-shrink:0;
+  width:29px;height:29px;border-radius:999px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:0.8125rem;font-weight:700;
+  font-size:0.75rem;font-weight:700;
   background:#2A2A2A;color:var(--text-faint);
 }
 .ck-step.activo .ck-circulo,.ck-step.hecho .ck-circulo{background:#FFFFFF;color:#0A0A0A}
-.ck-label{font-size:0.6875rem;line-height:1.3;color:var(--text-faint)}
+.ck-label{font-size:0.65rem;line-height:1.3;color:var(--text-faint)}
 .ck-step.activo .ck-label{color:#FFFFFF;font-weight:700}
 
-/* Paso 1: ítems del carrito */
-.ck-item{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+/* Paso 1: ítems del carrito — tarjeta individual (antes era una fila con
+   sólo un borde inferior); la sombra suave es la que pide "sensación de
+   profundidad" sin tocar colores. */
+.ck-item{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-campo);
+  box-shadow:0 2px 8px rgba(0,0,0,.22);
+}
 .ck-item-info{flex:1;min-width:0}
 .ck-item-nombre{
-  font-size:0.875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.02em;
+  font-size:0.8125rem;font-weight:700;text-transform:uppercase;letter-spacing:0.02em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.ck-item-precio{font-size:0.8125rem;color:var(--text-dim);margin-top:2px}
+.ck-item-precio{font-size:0.75rem;color:var(--text-dim);margin-top:2px}
 .ck-item-qty{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .ck-item-qty b{font-size:0.9375rem;font-weight:600;min-width:16px;text-align:center}
 .ck-icon-btn{
-  width:34px;height:34px;flex-shrink:0;
+  width:30px;height:30px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   border:1px solid var(--border);border-radius:var(--radio-campo);
   background:transparent;color:var(--text);cursor:pointer;
@@ -636,14 +681,14 @@ body > nav{
 .ck-cupon-caja .btn{width:auto;flex-shrink:0}
 
 /* Resumen alineado a la derecha */
-.ck-resumen{border-top:1px solid var(--border);padding-top:16px;margin-top:8px}
-.ck-linea{display:flex;justify-content:flex-end;gap:24px;font-size:0.875rem;color:var(--text-dim);padding:5px 0}
+.ck-resumen{border-top:1px solid var(--border);padding-top:14px;margin-top:8px}
+.ck-linea{display:flex;justify-content:flex-end;gap:24px;font-size:0.8125rem;color:var(--text-dim);padding:4px 0}
 .ck-linea b{color:var(--text);font-weight:500;min-width:96px;text-align:right}
 .ck-linea.ck-total{
-  border-top:1px solid var(--border);margin-top:10px;padding-top:14px;
-  font-size:1rem;color:var(--text);font-weight:700;
+  border-top:1px solid var(--border);margin-top:10px;padding-top:12px;
+  font-size:0.9375rem;color:var(--text);font-weight:700;
 }
-.ck-linea.ck-total b{font-size:1.375rem;font-weight:700}
+.ck-linea.ck-total b{font-size:1.25rem;font-weight:700}
 
 /* Paso 2 y 3: formularios a una sola columna, label arriba de cada campo */
 .ck-campos{display:flex;flex-direction:column;gap:14px}
@@ -659,30 +704,52 @@ body > nav{
 .ck-camino{
   display:block;width:100%;text-align:left;cursor:pointer;font-family:inherit;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
-  padding:16px;color:var(--text);
+  padding:14px;color:var(--text);
+  box-shadow:0 2px 8px rgba(0,0,0,.22);
   transition:border-color var(--transicion),background var(--transicion);
 }
 .ck-camino:hover{background:var(--surface-2);border-color:var(--accent)}
-.ck-camino b{display:block;font-size:0.9375rem;font-weight:600}
-.ck-camino span{display:block;font-size:0.8125rem;color:var(--text-dim);margin-top:4px}
+.ck-camino b{display:block;font-size:0.875rem;font-weight:600}
+.ck-camino span{display:block;font-size:0.75rem;color:var(--text-dim);margin-top:4px}
 
 /* Paso 3: un bloque por entrada */
-.ck-ticket{border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px;background:var(--surface)}
-.ck-ticket-titulo{margin-bottom:12px}
+.ck-ticket{
+  border:1px solid var(--border);border-radius:var(--radio-card);padding:14px;margin-bottom:10px;
+  background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.22);
+}
+.ck-ticket-titulo{margin-bottom:10px;font-size:0.9375rem}
 .ck-check{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:0.8125rem;color:var(--text-dim);cursor:pointer}
 .ck-check input{width:16px;height:16px;flex-shrink:0;accent-color:var(--accent);cursor:pointer}
 
-/* Paso 4: resumen de sólo lectura */
-.ck-repaso{border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px;background:var(--surface)}
-.ck-repaso h4{margin-bottom:10px}
-.ck-dato{display:flex;justify-content:space-between;gap:16px;font-size:0.875rem;padding:3px 0;color:var(--text-dim)}
-.ck-dato b{color:var(--text);font-weight:500;text-align:right;word-break:break-word}
+/* Paso 4: confirmación compacta — sólo los ítems comprados (con el nombre
+   truncado si no entra) y el total, sin repetir el evento ni los datos del
+   comprador que ya se vieron en los pasos anteriores. */
+.ck-items-compacto{margin-bottom:4px}
+.ck-item-simple{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:10px 14px;margin-bottom:6px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-campo);
+  box-shadow:0 2px 8px rgba(0,0,0,.22);
+}
+.ck-item-simple-nombre{
+  flex:1;min-width:0;font-size:0.8125rem;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ck-item-simple b{flex-shrink:0;font-size:0.8125rem;font-weight:600}
+.ck-terminos{align-items:flex-start;margin-top:16px}
+.ck-terminos input{margin-top:2px}
+.ck-terminos a{color:var(--accent);text-decoration:underline}
+.ck-terminos a:hover{color:var(--text)}
 
-/* Pie de cada paso: Volver a la izquierda, Siguiente/Pagar a la derecha */
-.ck-pie{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:24px}
+/* Pie de cada paso: Volver a la izquierda, Siguiente/Confirmar a la derecha */
+.ck-pie{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:22px}
 .ck-pie .btn{width:auto;min-width:132px}
 .ck-pie .btn.ghost{min-width:104px}
 .ck-pie-solo{justify-content:flex-end}
+/* Paso 4: el botón "Confirmar" va a ancho completo, no compartiendo fila
+   con "Volver" como en los otros pasos. */
+.ck-pie-confirmar{flex-direction:column-reverse;align-items:stretch}
+.ck-pie-confirmar .btn{width:100%;min-width:0}
 
 .attendee-row{display:flex;gap:8px;margin-bottom:12px;align-items:flex-start}
 .attendee-row .num{font-size:0.8125rem;color:var(--text-faint);min-width:20px;text-align:center;padding-top:10px}
@@ -831,8 +898,14 @@ body > nav{
 .admin-bar input{max-width:280px}
 .filtros-row{display:flex;gap:12px;flex-wrap:wrap;width:100%}
 .filtros-row select{flex:1;min-width:160px;font-size:0.875rem;padding:10px 12px}
-.resumen-filtro{color:var(--text-dim);font-size:0.875rem;margin:0 0 24px}
+.admin-bar-acciones{display:flex;gap:10px;flex-wrap:wrap}
+/* Cada dato del resumen es un span aparte (ver drawAdmin en app.js) para
+   que el salto de línea en mobile caiga entre datos, no a mitad de uno. El
+   "·" es un separador visual entre spans, no texto real. */
+.resumen-filtro{display:flex;flex-wrap:wrap;column-gap:6px;row-gap:4px;color:var(--text-dim);font-size:0.875rem;margin:0 0 24px}
 .resumen-filtro b{color:var(--text);font-weight:600}
+.resumen-filtro-item{white-space:nowrap}
+.resumen-filtro-item:not(:last-child)::after{content:"·";margin-left:6px;color:var(--text-faint)}
 .ev-admin-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
 .ev-admin-item{
   display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
@@ -845,6 +918,93 @@ body > nav{
 .ev-admin-item .row-actions{display:flex;gap:8px}
 .ev-admin-item .thumb-mini{width:44px;height:44px;object-fit:contain;border-radius:var(--radio-campo);border:1px solid var(--border);background:var(--surface-2);flex-shrink:0}
 .tipo-counts{font-size:0.8125rem;color:var(--text-dim);margin-top:4px;line-height:1.7}
+
+/* ---------- STUDIO: EVENTOS (lista → detalle) ----------
+   La lista son filas simples (nombre, fecha, estado): la tarjeta con
+   portada grande se usaba cuando cada una traía sus 4 botones; ahora la
+   fila entera abre el evento y las acciones viven adentro. */
+.ev-lista{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.ev-item{
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  cursor:pointer;font-family:inherit;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  padding:12px 16px;
+  transition:background var(--transicion),border-color var(--transicion);
+}
+.ev-item:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25)}
+.ev-item-portada{
+  width:52px;height:52px;flex-shrink:0;border-radius:var(--radio-campo);
+  background:var(--surface-2) center/cover no-repeat;border:1px solid var(--border);
+}
+.ev-item-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.ev-item-nombre{font-size:0.9375rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-item-fecha{font-size:0.8125rem;color:var(--text-dim)}
+.ev-item-meta{font-size:0.75rem;color:var(--text-faint)}
+.ev-item-estado{
+  flex-shrink:0;padding:3px 10px;border-radius:999px;
+  font-size:0.6875rem;font-weight:600;white-space:nowrap;
+  border:1px solid var(--border);color:var(--text-dim);
+}
+.ev-item-estado.venta{border-color:var(--ok);color:var(--ok)}
+.ev-item-estado.agotado{border-color:var(--accent);color:var(--accent)}
+.ev-item-estado.sinventa{border-color:var(--warn);color:var(--warn)}
+
+.ev-detalle-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:12px 0 20px}
+.ev-detalle-head h3{border:none;margin:0;padding:0}
+.ev-detalle-acciones{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Tabs Analytics / Editar evento */
+.ev-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.ev-tab{
+  background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;
+  padding:10px 16px;cursor:pointer;font-family:inherit;font-size:0.875rem;font-weight:600;
+  color:var(--text-dim);transition:color var(--transicion),border-color var(--transicion);
+}
+.ev-tab:hover{color:var(--text)}
+.ev-tab.activo{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* KPIs del evento: fila en desktop, 2x2 en mobile */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.kpi{
+  position:relative;overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  padding:18px 20px;
+}
+.kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent)}
+.kpi small{display:block;margin-bottom:8px;color:var(--text-dim);font-size:0.75rem}
+.kpi b{font-size:1.5rem;font-weight:700;line-height:1.1;word-break:break-word}
+
+.ev-an-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+
+/* Barra de % vendido en la tabla por tipo */
+.an-pct{display:flex;align-items:center;gap:8px;min-width:120px}
+.an-pct-track{flex:1;min-width:60px;height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.an-pct-fill{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.an-pct-num{font-size:0.75rem;color:var(--text-dim);flex-shrink:0}
+
+/* Gráfico ventas (área) + visitas (línea), con scroll horizontal si no entra */
+.ev-chart-scroll{overflow-x:auto;margin-top:12px}
+.ev-chart-inner{position:relative;min-width:520px}
+.ev-chart-svg{width:100%;height:auto;display:block;overflow:visible}
+.ev-chart-visitas{fill:none;stroke:var(--ok);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.resumen-chart-label.visitas{fill:var(--ok)}
+.ev-chart-banda{fill:transparent;cursor:crosshair}
+.ev-chart-guia{stroke:var(--text-faint);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
+.ev-chart-tooltip{
+  position:absolute;top:0;transform:translateX(-50%);pointer-events:none;z-index:2;
+  display:flex;flex-direction:column;gap:2px;white-space:nowrap;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radio-campo);
+  padding:8px 10px;font-size:0.75rem;color:var(--text-dim);
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+}
+.ev-chart-tooltip b{color:var(--text);font-size:0.8125rem}
+.ev-chart-tooltip .tip-ventas{color:var(--accent)}
+.ev-chart-tooltip .tip-visitas{color:var(--ok)}
+.ev-chart-leyenda{display:flex;gap:16px;margin-top:12px;font-size:0.75rem;color:var(--text-dim)}
+.ev-leyenda-item{display:flex;align-items:center;gap:6px}
+.ev-leyenda-item::before{content:"";width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.ev-leyenda-item.ventas::before{background:var(--accent)}
+.ev-leyenda-item.visitas::before{background:var(--ok)}
 
 /* ---------- PANEL: GRILLA DE EVENTOS ----------
    Sólo "Eventos" (los próximos, en venta) usa tarjetas con portada; los
@@ -909,6 +1069,71 @@ tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(
 /* Alta de un email del equipo: input y botón en una fila acotada */
 .alta-staff{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;max-width:460px}
 .alta-staff input{flex:1;min-width:200px}
+
+/* ---------- EQUIPO: TARJETAS DE COLABORADOR ----------
+   Una tarjeta cuadrada por persona (aspect-ratio:1), con la inicial o su
+   foto, el nombre y una pastilla con el rol. El color del rol sale de los
+   tokens de siempre: naranja de marca para el admin, y sólo borde+texto
+   para los otros dos — nada de fondos de color nuevos. */
+.equipo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.equipo-head .btn{flex-shrink:0}
+.equipo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.colab-card{
+  aspect-ratio:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:16px;text-align:center;cursor:pointer;font-family:inherit;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+  transition:border-color var(--transicion),background var(--transicion);
+}
+.colab-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),.25)}
+.colab-card.inactivo{opacity:.5}
+.colab-avatar{
+  width:52px;height:52px;border-radius:999px;overflow:hidden;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:1.25rem;font-weight:700;color:var(--text-dim);
+}
+.colab-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.colab-nombre{font-size:0.875rem;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.colab-rol{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:999px;
+  font-size:0.6875rem;font-weight:600;letter-spacing:.02em;
+  border:1px solid var(--border);color:var(--text-dim);
+}
+.colab-rol svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.colab-rol[data-rol="admin"]{border-color:var(--accent);color:var(--accent)}
+.colab-rol[data-rol="encargado"]{border-color:var(--ok);color:var(--ok)}
+.colab-alcance{font-size:0.6875rem;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.colab-tag{font-size:0.625rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--bad)}
+
+/* Detalle del colaborador: mismo modal de siempre, un poco más ancho */
+.modal-equipo{max-width:520px}
+.eq-titulo{margin:22px 0 10px}
+.eq-fijo{font-size:0.875rem;color:var(--text-dim);padding:10px 0}
+.eq-roles{display:flex;flex-direction:column;gap:8px}
+.eq-rol{
+  display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:2px 12px;
+  width:100%;text-align:left;cursor:pointer;font-family:inherit;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);padding:12px 14px;
+  transition:border-color var(--transicion),background var(--transicion);
+}
+.eq-rol:hover{background:var(--surface-2)}
+.eq-rol.elegido{border-color:var(--accent);background:rgba(var(--acento-rgb),.04)}
+.eq-rol-ico{grid-row:1/3;align-self:center;display:flex;color:var(--text-dim)}
+.eq-rol.elegido .eq-rol-ico{color:var(--accent)}
+.eq-rol-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.eq-rol b{font-size:0.875rem;font-weight:600}
+.eq-rol span:not(.eq-rol-ico){font-size:0.75rem;color:var(--text-dim);line-height:1.4}
+.eq-alcance{display:flex;gap:8px;flex-wrap:wrap}
+.eq-chip{
+  padding:8px 14px;border-radius:999px;cursor:pointer;font-family:inherit;
+  font-size:0.8125rem;color:var(--text-dim);
+  background:transparent;border:1px solid var(--border);
+  transition:border-color var(--transicion),color var(--transicion);
+}
+.eq-chip.elegido{border-color:var(--accent);color:var(--accent)}
+.eq-eventos{display:flex;flex-direction:column;gap:4px;margin-top:12px;max-height:220px;overflow-y:auto}
 
 /* ---------- ESCÁNER ---------- */
 .esc-marca{margin-bottom:24px;line-height:1}
@@ -1077,6 +1302,85 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .detail-wrap{padding:24px 16px 48px}
   .d-bloque{margin-top:40px}
   footer{padding:40px 16px}
+
+  /* ---------- STUDIO: COMPRADORES EN MÓVIL ----------
+     Sólo esta pantalla cambia acá — el resto del Studio (y esta misma en
+     desktop) sigue igual. Los selectores de filtro se apilan en una sola
+     columna, los botones de acción pasan a una grilla de 2 y la tabla de
+     resultados (.tabla-compras, no la de arriba con el resumen por tipo)
+     se convierte en una tarjeta por compra. */
+  .filtros-row{flex-direction:column;gap:14px}
+  .filtros-row select{width:100%;min-width:0}
+  .admin-bar-acciones{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .admin-bar-acciones .btn{width:100%}
+
+  .tabla-compras-wrap{border:none;border-radius:0;overflow:visible}
+  .tabla-compras{min-width:0}
+  .tabla-compras thead{display:none}
+  .tabla-compras tbody{display:block}
+  .tabla-compras tr{
+    display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
+    padding:14px 16px;margin-bottom:10px;
+  }
+  .tabla-compras td{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:7px 0;border-bottom:1px solid var(--border);
+    text-align:right;
+  }
+  .tabla-compras td:last-child{border-bottom:none}
+  .tabla-compras td::before{content:attr(data-label);flex-shrink:0;color:var(--text-faint);font-size:0.75rem;text-align:left}
+  /* El tipo de entrada es el título de la tarjeta: va arriba de todo
+     (order:-1, ver drawAdmin) y sin la etiqueta que sí llevan los demás. */
+  .tabla-compras-tipo{
+    order:-1; display:block; text-align:left;
+    font-size:0.9375rem;font-weight:700;color:var(--text);
+    padding:0 0 10px; margin-bottom:6px; border-bottom:1px solid var(--border);
+  }
+  .tabla-compras-tipo::before{content:none}
+
+  /* ---------- STUDIO: EVENTOS Y ANALYTICS EN MÓVIL ---------- */
+  .ev-item{padding:10px 12px;gap:12px}
+  .ev-item-portada{width:44px;height:44px}
+  /* El estado baja a su propia línea: al lado del nombre largo, en 360px
+     lo empujaba fuera de la tarjeta. */
+  .ev-item{flex-wrap:wrap}
+  .ev-item-info{flex-basis:calc(100% - 56px)}
+  .ev-item-estado{margin-left:56px}
+  #ev-nuevo-btn{width:100%;display:block}
+  .ev-detalle-acciones{width:100%}
+  .ev-detalle-acciones .btn{flex:1}
+  .ev-tabs{gap:0}
+  .ev-tab{flex:1;padding:10px 8px;text-align:center}
+
+  /* KPIs: 2x2 y números grandes */
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:14px}
+  .kpi small{font-size:0.6875rem}
+  .kpi b{font-size:1.375rem}
+
+  /* Desglose por tipo: una tarjeta por tipo, igual que Compradores */
+  .tabla-tipos-wrap{border:none;border-radius:0;overflow:visible}
+  .tabla-tipos-an{min-width:0}
+  .tabla-tipos-an thead{display:none}
+  .tabla-tipos-an tbody{display:block}
+  .tabla-tipos-an tr{
+    display:flex;flex-direction:column;
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radio-card);
+    padding:12px 14px;margin-bottom:8px;
+  }
+  .tabla-tipos-an td{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:6px 0;border-bottom:1px solid var(--border);text-align:right;
+  }
+  .tabla-tipos-an td:last-child{border-bottom:none}
+  .tabla-tipos-an td::before{content:attr(data-label);flex-shrink:0;color:var(--text-faint);font-size:0.75rem;text-align:left}
+  .tabla-tipos-nombre{
+    display:block;text-align:left;font-size:0.9375rem;
+    padding:0 0 8px;margin-bottom:4px;border-bottom:1px solid var(--border);
+  }
+  .tabla-tipos-nombre::before{content:none}
+  .an-pct{min-width:0;max-width:60%}
 }
 
 /* ---------- MOVIMIENTO REDUCIDO ---------- */
