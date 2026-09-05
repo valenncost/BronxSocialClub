@@ -14,13 +14,14 @@ Full business requirements, the client's current ticket line-up, and the target 
 
 What's done:
 - **Phase 1 (rebrand).** All app files copied from torino, brand text swapped to "Bronx Social Club", palette repointed (background `#0A0A0B`, gradient `#F4526B → #F58C29`, solid orange `#F58C29`), `iconos/*.png` regenerated in orange (flat-color generated PNGs — regenerate with a script, don't hand-edit). Supabase credentials point at **Bronx's own project** (`wxoxonthagjwhhzwlahz`). `ADMIN_EMAIL` is still the developer's address, not the client's — per `BRONX-SPEC.md` §6 it becomes Nano Rabbione's before handoff, **in both `js/app.js` and `sql/02-rls.sql`**.
-- **Phase 2 (pricing model).** Sequential `lotes` are gone — replaced by the `tipos_ticket` table: several ticket types on sale at the same time, grouped into TICKETS and COMBOS on the event page, each with its own quantity picker; one purchase can mix types. See "Tipos de ticket" below. `eventos` no longer has `precio_general`, `lotes` or `lote_activo`.
+- **Phase 2 (pricing model).** `tipos_ticket` holds the event's *categories* (LA TERRAZA, GENERAL, the bottle combos), grouped into TICKETS and COMBOS on the event page, each with its own quantity picker; one purchase can mix them. `eventos` has no price columns.
+- **Phase 3 (lotes).** Price and quota moved out of the ticket type and into a per-event sequence of **lotes** (`sql/lotes.sql`), modelled on torino's: each lote has a name, a price and a cupo, and the vigente one is simply the first with room left — it advances on its own. The event page shows the **whole ladder**, the vigente one marked "en venta" and the rest "próximamente". Combos stay outside (`tipos_ticket.usa_lotes = false`), keeping their own price and quota. See "Lotes" below.
 - **`sql/`** now holds every SQL the project needs (tables, RLS, the `ventas_por_tipo` view, the storage bucket). See `sql/README.md` for the order to run them.
 
 What's **not** done yet:
 - **The `crear-pago` Edge Function** has not been written or deployed. (The SQL in `sql/` *has* been run against Bronx's live Supabase project — tables, RLS, the view, storage, and the test data are all live; the one thing still pending there is swapping `ADMIN_EMAIL`/`es_admin()` to Nano's mail before handoff, per `sql/README.md`.)
 - **"Eventos pasados" + the gallery are pulled out of the UI for now.** The public "Eventos pasados" section (index.html), its Studio manager (`sec-pasados` in admin.html), and the event-detail gallery (`d-galeria-sec`) are commented out, not deleted — the matching JS (`loadPasados`, `openPasado`, `loadPasadosAdmin`, `savePasado`, etc. in `js/app.js`) is commented out right alongside them. They're going to be replaced by a different section (artists who've played Bronx) rather than restored as-is; the `galeria` table and its RLS policies stay in `sql/` untouched in the meantime.
-- **Free tickets** ($0, skip Mercado Pago). The `tipos_ticket.precio` column allows 0 and the UI would render it, but checkout would send an invalid total — so `validarTipos()` in the admin deliberately rejects a price of 0 until this is built.
+- **Free tickets** ($0, skip Mercado Pago). The price columns allow 0 and the UI would render it, but checkout would send an invalid total — so `validarTipos()` (combos) and `validarLotes()` (the lote price grid) in the admin both deliberately reject a price of 0 until this is built.
 - **Hidden tickets.** `tipos_ticket.oculto` / `codigo_acceso` exist and the RLS policy hides them from the public, but there's no unlock UI and no way to fetch them — that needs an RPC (see `sql/README.md`).
 - **Combos with a bottle voucher.** `accesos` is stored on the type and copied to each `compras` row, but a combo of 5 accesses still emits **one** QR per unit purchased, not 5 + a voucher. `BRONX-SPEC.md` §9 decides the target; the scanner side is step 8 of the plan.
 - Minimum age, "duplicate event" for the weekly recurring shows — `BRONX-SPEC.md` §4.
@@ -52,7 +53,7 @@ Not deployed yet. Per `BRONX-SPEC.md` §6, this needs its own GitHub repo and it
 - `admin.html` — the **Studio** (the panel is called Studio in the UI, though the route stays `/admin`): login + dashboard with a sidebar (Resumen, Eventos, Compradores, Usuarios, Equipo, Escáner). Past events/gallery used to live inside Eventos — pulled out for now, see "Current status".
 - `escaner.html` — QR scanner for door check-in (uses the `html5-qrcode` library from a CDN). Also the only page that registers the service worker and links the manifest.
 - `sw.js` + `manifest.webmanifest` + `iconos/` — installable-app plumbing for the scanner (see Modo puerta below).
-- `sql/` — every SQL statement the Supabase project needs, numbered in run order (`01-tablas` → `02-rls` → `03-vistas` → `04-storage` → `roles-equipo`, which must run after `02-rls` since it redefines `es_admin()`/`es_staff()` → `evento-vistas`, which depends on `es_encargado()`). `sql/README.md` explains the order and what still needs SQL that isn't written yet. **This is the schema's source of truth** — when you change what the app reads or writes, change these files too.
+- `sql/` — every SQL statement the Supabase project needs, numbered in run order (`01-tablas` → `02-rls` → `03-vistas` → `04-storage` → `roles-equipo`, which must run after `02-rls` since it redefines `es_admin()`/`es_staff()` → `evento-vistas` and `cortesias`, which depend on `es_encargado()` → `lotes`, which depends on both `es_escaner()` and `es_encargado()`). `sql/README.md` explains the order and what still needs SQL that isn't written yet. **This is the schema's source of truth** — when you change what the app reads or writes, change these files too.
 - `BRONX-SPEC.md` — the client brief: business context, target pricing model, feature gaps vs. FlashPass (the incumbent), and the phased work plan. Read this first for *why*; this file is for *how the code works*.
 
 Every HTML page loads the same `js/app.js` and `css/estilos.css`, and declares which page it is via `<body data-page="...">`. `initPage()` at the bottom of `app.js` (run on `DOMContentLoaded`) branches on that attribute to decide what to load/render.
@@ -115,8 +116,10 @@ Event detail deep-links via `?evento=<id>`, restored on load and on `popstate` i
 
 Tables (defined in `sql/01-tablas.sql`, policies in `sql/02-rls.sql`):
 - `eventos` — events. Flags: `activo`, `pasado`, `agotado`, `ubicacion_secreta`. `color_acento` is the event's accent-color key (see "Per-event accent color"). **No price columns** — pricing lives entirely in `tipos_ticket`.
-- `tipos_ticket` — the ticket types of an event, all on sale simultaneously: `evento_id`, `nombre`, `descripcion`, `precio`, `cantidad` (cupo, null = sin límite), `orden`, `categoria` (`ticket`|`combo`), `accesos`, `activo`, `oculto`, `codigo_acceso`, `valido_desde`, `valido_hasta`.
-- `compras` — purchases/tickets, one row per QR. `grupo` (order number, groups the rows of one checkout), `evento`/`evento_id`, `tipo`/`tipo_ticket_id`, `accesos`, `nombre`, `apellido`, `documento` (the attendee's DNI), `email`, `total` (what that one ticket cost, service fee included), `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`. Buyer data repeats on every row of the order (`comprador_nombre`, `comprador_apellido`, `comprador_tipo_doc`, `comprador_documento`, `comprador_telefono`), and `user_id` is the buyer's `auth.users` id — **null when someone bought as a guest**. Names *and* ids are stored so a ticket stays readable after its event or type is deleted.
+- `tipos_ticket` — what an event sells, all on sale simultaneously: `evento_id`, `nombre`, `descripcion`, `precio`, `cantidad` (cupo, null = sin límite), `orden`, `categoria` (`ticket`|`combo`), `accesos`, `activo`, `oculto`, `codigo_acceso`, `valido_desde`, `valido_hasta`, `usa_lotes`. **`precio` and `cantidad` only mean anything when `usa_lotes` is false** (the combos) — otherwise both come from the vigente lote.
+- `lotes` — the event's sales stages, one sequence per event: `evento_id`, `nombre`, `orden`, `precio`, `cupo` (null = sin límite, so that lote never ends and hides the ones after it), `aviso_ultimas` (the threshold for the "¡Quedan las últimas N!" line on the event page; null = never show it — it's the organiser's call per lote, not automatic).
+- `lotes_publicos` — **view**, and the only lote data `anon` may read: every lote of every published event with its `vendidas` and a `vigente` flag. It returns the whole ladder on purpose (the page shows future lotes and their prices); it exists so the count of `compras` can be made without the visitor being able to read that table.
+- `compras` — purchases/tickets, one row per QR. `grupo` (order number, groups the rows of one checkout), `evento`/`evento_id`, `tipo`/`tipo_ticket_id`, `lote`/`lote_id` (null on a combo — the lote's quota is counted from these rows, so a sale that doesn't carry it never makes the lote advance), `accesos`, `nombre`, `apellido`, `documento` (the attendee's DNI), `email`, `total` (what that one ticket cost, service fee included), `codigo` (QR code), `estado` (`pendiente`/`aprobado`/`rechazado`), `usada`/`usada_en` (check-in), `creado_en`. Buyer data repeats on every row of the order (`comprador_nombre`, `comprador_apellido`, `comprador_tipo_doc`, `comprador_documento`, `comprador_telefono`), and `user_id` is the buyer's `auth.users` id — **null when someone bought as a guest**. Names *and* ids are stored so a ticket stays readable after its event or type is deleted.
 - `cupones` — discount codes. **Deliberately empty**: there's no discount system yet, but the checkout's "¿Tenés un código de descuento?" input already queries this table (and therefore always answers "código inválido"). Filling rows in is all it takes to turn it on; the front end doesn't change.
 - `galeria` — photos/videos attached to a past event (`evento_id`, `tipo`: `foto`|`video`, `url`, `orden`). The table and its RLS policies stay; nothing in the app reads or writes it right now — see "Current status".
 - `perfiles` — user profile mirror (name/surname/phone), filled by an `auth.users` trigger, read by the admin panel's "Usuarios registrados" table.
@@ -183,26 +186,42 @@ In analytics, a courtesy is **not a sale**: `ventasDeEvento()` (facturación, ti
 
 **The mail itself is not sent from this repo.** `enviarCortesia()` POSTs to a `enviar-cortesia` Edge Function that, like `crear-pago` and `reenviar-entradas`, **does not exist yet** — so today that call fails, and the UI says so and renders the QR on screen to send by hand. The ticket is already valid either way.
 
-### Tipos de ticket (the pricing model)
+### Tipos de ticket y lotes (the pricing model)
 
-Every ticket type of an event is on sale **at the same time** — there is no active tier, no automatic advance. An event with no types is announced but not purchasable.
+Two orthogonal things, and conflating them is the easiest way to break this:
 
-`TIPOS` is `{evento_id: [tipo, ...]}`, sorted by `orden`. `cargarTipos(todos)` fills it: the public page asks for `activo=true&oculto=false`, the admin panel passes `true` to get every type including paused and hidden ones.
+- **`tipos_ticket` = what is sold** (the general ticket, and the bottle combos alongside it).
+- **`lotes` = the stages.** One sequence per event, each lote with its own **nombre, precio and cupo**. They say *how much* and *how many are left*.
 
-Sold counts live in `VENTAS_TIPO` (`{tipo_ticket_id: n}`), keyed by **id**, not name:
-- **Public pages**: `cargarVentasTipo()` reads the `ventas_por_tipo` view. Both it and `cargarTipos()` must be awaited *before* `loadEvents()`/`openDetail()`, or everything renders from a count of zero. If the view doesn't exist the error is swallowed, `VENTAS_VISTA_OK` stays false (the admin shows a warning) and all counts are zero.
-- **Admin**: `loadPurchases()` overwrites it via `ventasTipoDesdePurchases()`, computed from the full `compras` rows the panel already loads, so the numbers are exact even without the view.
+**The vigente lote is the first one by `orden` that still has room** — that's the whole auto-advance: nothing is flagged active, nothing is scheduled. When it fills, the next one becomes vigente and the page starts charging its price. With no lote left with room, the event is sold out. `cupo == null` means no limit, so that lote never ends and every lote after it is unreachable (the admin refuses to save that unless it's the last one).
+
+**The ladder is public.** `escaleraLotesHTML()` renders *every* lote with its price — the vigente one "en venta", the ones behind it struck through, the ones ahead "próximamente" in gray — so the buyer sees what the price climbs to. That's the point of lotes; don't "protect" future prices by hiding them. The `¡Quedan las últimas N!` line under the vigente lote is **not automatic**: it appears only when that lote has an `aviso_ultimas` threshold and the remaining count has dropped to it. No threshold, no line.
+
+**Combos are outside the lotes** (`usa_lotes = false`): they keep `tipos_ticket.precio` / `.cantidad`, and their sales do **not** consume the lote's quota (`compras.lote_id` is null on them). Conversely, the lote's quota is a **shared bag** across every type that does use lotes, which is why `topeTipo()` exists (see below).
+
+`cargarLotesPublico()` reads the `lotes_publicos` view (which carries `vendidas`), the Studio's `cargarLotesAdmin()` reads the `lotes` table; both fill the same `LOTES` (`{evento_id: [lote,...]}`), so `loteVigenteDe(evId)` is the same "first with room" search either way.
+
+Sold counts live in `VENTAS_TIPO` (`{tipo_ticket_id: n}`, the combos' quota) and `VENTAS_LOTE` (`{lote_id: n}`, the lote's quota), both keyed by **id**, not name:
+- **Public pages**: `cargarVentasTipo()` reads the `ventas_por_tipo` view; `VENTAS_LOTE` comes from the `vendidas` column `lotes_publicos` already carries. `cargarTipos()`, `cargarLotesPublico()` and `cargarVentasTipo()` must all be awaited *before* `loadEvents()`/`openDetail()`, or everything renders from a count of zero and a price of null. If `ventas_por_tipo` doesn't exist the error is swallowed, `VENTAS_VISTA_OK` stays false (the admin shows a warning) and all counts are zero.
+- **Admin**: `loadPurchases()` overwrites both via `ventasTipoDesdePurchases()` / `ventasLoteDesdePurchases()`, computed from the full `compras` rows the panel already loads, so the numbers are exact even without the views.
 
 The derived helpers are the ones to reuse — don't recompute this inline:
-- `restantesTipo(t)` — `cantidad == null` means no quota, so it returns `Infinity`.
+- `precioTipo(t)` — **the only correct way to price a ticket.** The vigente lote's price, or the type's own when `usa_lotes` is false. `null` means every lote is full, so there's nothing to sell. Never read `t.precio` directly outside this function.
+- `restantesTipo(t)` — the lote's remaining for a lote-driven type, the type's own `cantidad` for a combo (`null` → `Infinity`).
+- `topeTipo(t)` — what `chTipo()`/`ckSumar()` clamp to. It's `restantesTipo` minus what the *other* categories of the same lote already have in `SELECCION`, capped at `MAX_POR_TIPO`. Using `restantesTipo` alone would let a buyer take the shared quota twice.
 - `tipoAgotado(t)` / `tipoDisponible(t)`.
-- `precioDesde(ev)` — the cheapest type that still has room, or `null` (the card then reads "Próximamente"). `sinVenta(ev)` is the no-types-at-all case.
-- `eventoAgotado(ev)` — the manual `agotado` flag, **or** every type sold out. An event with zero types is not "agotado".
+- `precioDesde(ev)` — the cheapest available type at today's prices, or `null` (the card then reads "Próximamente"). `sinVenta(ev)` covers both "no types" and "lote-driven types with no lotes loaded".
+- `eventoAgotado(ev)` — the manual `agotado` flag, **or** every type sold out. An event whose lotes are all full is agotado; one with lote-driven types but no lotes at all is *sin venta*, not agotado.
+- `tiposALaVenta(ev)` — activos, no ocultos, and configured (a lote-driven type in an event with no lotes isn't sellable and drops out). When the lotes are all full the types stay visible and read "Agotado" — dropping them there would say "no hay entradas" instead of "se agotaron".
 
-**Selection and checkout.** `SELECCION` is `{tipo_ticket_id: cantidad}`, picked on the event detail page (`renderTiposDetalle` groups by `categoria` into TICKETS and COMBOS). `chTipo()` clamps to `min(MAX_POR_TIPO, restantesTipo)`. From there:
+**Studio.** The lote editor (`LOTES_FORM`, `renderLotesForm`, `sincronizarLotes`) sits in the event form under "Tipos de entrada", same draft-in-memory rule as the types: nothing is written until "Guardar evento". Each lote row is nombre / precio / cupo / aviso_ultimas, and the state pill (`estadoLoteForm()`) applies the same "first with room" rule the database does, so the Studio shows what the buyer is seeing. Editing a cupo repaints the pills through `pintarEstadosLotes()` instead of re-rendering — redrawing would drop focus mid-number.
+
+**Selection and checkout.** `SELECCION` is `{tipo_ticket_id: cantidad}`, picked on the event detail page (`renderTiposDetalle` renders `escaleraLotesHTML()` first, then groups the types by `categoria` into TICKETS and COMBOS). `chTipo()` clamps to `topeTipo(t)`. From there:
 - `itemsSeleccionados()` → `[{tipo, cantidad}]`, one per chosen type.
 - `unidadesSeleccionadas()` → one entry per QR to emit, in the same order the checkout renders attendee blocks and `ckPagar()` reads them back. **These two orders must stay in sync** — both derive from `tiposALaVenta(cur)`, so don't sort one of them independently.
 - `totalesSeleccion()` → `{entradas, subtotal, servicio, total}`.
+
+The price is frozen into `CK.asistentes` (and into the `crear-pago` payload) together with the `lote_id` it came from, so a lote that advances mid-checkout doesn't silently reprice an order in progress. `crear-pago` must copy `lote_id` onto every `compras` row it writes — the lote's quota is counted from those rows, so a sale without it never makes the lote advance.
 
 A service fee (`SERVICIO_PCT`, **10%**) is added per ticket via `servicioDe(precio)`; the buyer pays it on top of the subtotal. That constant is the single source of truth — the percentages shown in the UI are rendered from it, so never hardcode "10%" in the HTML or in a template string.
 
@@ -221,11 +240,14 @@ A service fee (`SERVICIO_PCT`, **10%**) is added per ticket via `servicioDe(prec
 
 **Admin editor.** `TIPOS_FORM` is an editable copy of the event's types; `TIPOS_BORRADOS` holds ids to delete. Nothing touches the database until "Guardar evento": `saveEvento()` writes the event first (a new one needs its id), then `sincronizarTipos(eventoId)` deletes, updates and inserts. The inputs write straight into `TIPOS_FORM` via `setTipoCampo()` and only add/move/delete re-render — re-rendering on every keystroke would drop focus mid-word.
 
-### Required SQL: the `ventas_por_tipo` view
+### Required SQL: the public-facing views
 
-Public visitors must never be able to read `compras` — it holds `codigo`, the exact value the door scanner accepts, plus every buyer's name and email. Counting tickets therefore goes through an aggregate-only view (`sql/03-vistas.sql`) that returns nothing but `tipo_ticket_id` and a count, and runs with its owner's permissions so it can read `compras` while the caller can't.
+Public visitors must never be able to read `compras` — it holds `codigo`, the exact value the door scanner accepts, plus every buyer's name and email. Counting tickets therefore goes through aggregate-only views that run with their owner's permissions, so they can read `compras` while the caller can't:
 
-Never widen this to expose per-row purchase data to `anon`.
+- `ventas_por_tipo` (`sql/03-vistas.sql`) — nothing but `tipo_ticket_id` and a count.
+- `lotes_publicos` (`sql/lotes.sql`) — the lotes of published events with their `vendidas` and a `vigente` flag. Prices here are meant to be public (the ladder shows them); what the view protects is the per-row `compras` data the count is derived from.
+
+Never widen either of these to expose per-row purchase data to `anon`.
 
 ## Working rules for Claude Code
 

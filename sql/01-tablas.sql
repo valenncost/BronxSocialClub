@@ -35,9 +35,13 @@ create index if not exists eventos_activo_idx on public.eventos (activo, pasado)
 -- ============================================================
 -- TIPOS DE TICKET
 -- ============================================================
--- Un evento tiene varios tipos a la venta AL MISMO TIEMPO (no lotes que
--- avanzan). Ej de un sábado de Bronx: LA TERRAZA $17.000, GENERAL 1 $8.000,
--- GENERAL 2 $10.000, ACCESO LIBERADO $0, y aparte los combos con botella.
+-- Las CATEGORÍAS del evento, todas a la venta al mismo tiempo: LA TERRAZA,
+-- GENERAL, ACCESO LIBERADO, y aparte los combos con botella.
+--
+-- ⚠️ El precio y el cupo de acá abajo valen SÓLO para los tipos que no van por
+-- lote (los combos). Desde `lotes.sql` los demás toman el precio y el cupo del
+-- LOTE vigente, y `usa_lotes` dice cuál es cuál. Ver "Cómo quedan los precios"
+-- en sql/README.md.
 create table if not exists public.tipos_ticket (
   id            bigserial primary key,
   evento_id     bigint not null references public.eventos(id) on delete cascade,

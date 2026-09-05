@@ -572,6 +572,32 @@ body > nav{
 .tipos-titulo{color:var(--text);margin-bottom:16px}
 .tipos-vacio{color:var(--text-dim);margin:0}
 
+/* La escalera de lotes. Se muestran todos: el vigente en blanco (o en el color
+   del evento) con su pastilla "en venta", y los que vienen apagados y con
+   "próximamente" — el comprador ve a cuánto se va el precio si se duerme.
+   El aviso de últimas es opcional y lo prende el organizador por lote. */
+.lote-escalera{margin-bottom:24px}
+.lote-fila{
+  display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+.lote-fila:last-child{border-bottom:none}
+.lote-fila-nombre{flex:1;font-size:0.9375rem;color:var(--text-dim)}
+.lote-fila-precio{font-size:1.0625rem;font-weight:600;color:var(--text-dim);white-space:nowrap}
+.lote-fila-estado{
+  font-size:0.75rem;padding:4px 12px;border-radius:999px;white-space:nowrap;
+  border:1px solid var(--border);color:var(--text-faint);
+}
+/* El que se está vendiendo: el único a full contraste */
+.lote-fila.vigente .lote-fila-nombre{color:var(--text);font-weight:500}
+.lote-fila.vigente .lote-fila-precio{color:var(--text)}
+.lote-fila.vigente .lote-fila-estado{border-color:var(--ok);color:var(--ok)}
+.lote-fila.agotado{opacity:.45}
+.lote-fila.agotado .lote-fila-nombre{text-decoration:line-through}
+.lote-aviso{
+  margin:0 0 4px;font-size:0.875rem;font-weight:600;color:var(--accent);
+}
+
 .tipo-card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
   padding:20px;transition:background var(--transicion),border-color var(--transicion);
@@ -1188,6 +1214,42 @@ tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(
 .tipo-form-check{display:flex;align-items:center;gap:8px;font-size:0.875rem;color:var(--text-dim);cursor:pointer}
 .tipo-form-check input{width:auto;margin:0}
 .tipo-form-vendidas{color:var(--text-faint);font-size:0.8125rem}
+/* Los que van por lote no muestran precio ni cupo propios: en su lugar va la
+   nota que dice de dónde salen, con el mismo alto que tendría un campo. */
+.tipo-form-porlote span{display:block;margin-top:8px;font-size:0.8125rem;color:var(--text-faint);line-height:1.5;text-transform:none;letter-spacing:normal}
+
+/* ---------- PANEL: EDITOR DE LOTES ----------
+   Mismo lenguaje que el editor de tipos; lo único propio es el cartel de
+   estado, que dice cuál se está vendiendo ahora. */
+.lote-form{background:var(--bg);border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px}
+.lote-form.vigente{border-color:var(--accent);background:rgba(var(--acento-rgb),0.04)}
+.lote-form.agotado{opacity:.55}
+.lote-form-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.lote-form-num{font-size:0.8125rem;font-weight:600;color:var(--text-faint);min-width:18px}
+.lote-form-nombre{flex:1;min-width:140px;font-weight:600}
+.lote-form-estado{font-size:0.75rem;font-weight:600;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text-dim);white-space:nowrap}
+.lote-form.vigente .lote-form-estado{border-color:var(--accent);color:var(--accent)}
+.lote-form-acciones{display:flex;gap:8px}
+.lote-form-acciones .btn-mini{padding:6px 10px;font-size:0.75rem}
+.lote-form-acciones .btn-mini[disabled]{opacity:.35;cursor:default}
+.lote-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end}
+.lote-form-grid label{margin-bottom:0}
+.lote-form-grid input{margin-top:8px;font-size:0.875rem;padding:10px 12px}
+.lote-form-vendidas{color:var(--text-faint);font-size:0.8125rem;padding-bottom:10px}
+.lotes-vacio{color:var(--text-dim);font-size:0.8125rem;margin-bottom:12px}
+
+/* ---------- PANEL: AVANCE DE LOTES EN ANALYTICS ---------- */
+.lotes-an{margin-bottom:20px}
+.lote-an{padding:12px 0;border-bottom:1px solid var(--border)}
+.lote-an:last-child{border-bottom:none;padding-bottom:0}
+.lote-an.agotado{opacity:.6}
+.lote-an-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lote-an-precio{color:var(--text-dim);font-size:0.875rem}
+.lote-an-estado{font-size:0.75rem;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text-dim)}
+.lote-an.vigente .lote-an-estado{border-color:var(--accent);color:var(--accent)}
+.lote-an-plata{margin-left:auto;color:var(--accent);font-weight:500}
+.lote-an-datos{font-size:0.8125rem;color:var(--text-dim);margin:6px 0 8px}
 
 /* Alta de un email del equipo: input y botón en una fila acotada */
 .alta-staff{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;max-width:460px}

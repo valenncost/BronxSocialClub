@@ -12,6 +12,7 @@ desde el SQL Editor:
 | 5 | `roles-equipo.sql` | Roles del equipo: tablas `colaboradores` y `colaborador_rol` + las policies de cada rol. **Redefine `es_admin()` y `es_staff()`** de `02-rls.sql`, así que va siempre después |
 | 6 | `evento-vistas.sql` | Tabla `evento_vistas` (visitas a la página de cada evento) para el KPI "Vistas" y el gráfico de Analytics del Studio. Usa `es_encargado()`, así que va después de `roles-equipo.sql` |
 | 7 | `cortesias.sql` | Columna `compras.origen` (`venta`/`cortesia`) + la policy que deja al organizador y a los encargados emitir entradas de invitación desde el Studio. También usa `es_encargado()` |
+| 8 | `lotes.sql` | **Lotes**: tabla `lotes`, la vista `lotes_publicos`, `tipos_ticket.usa_lotes`, `compras.lote_id`/`lote` y la migración de lo que ya estaba cargado. Usa `es_escaner()` y `es_encargado()`, así que va después de `roles-equipo.sql` |
 
 Se pueden correr de nuevo sin romper nada: todo es `create ... if not exists` /
 `create or replace` / `drop policy if exists`.
@@ -68,14 +69,43 @@ La tabla vieja `staff` **queda en la base pero ya no la lee nadie**: sus emails 
 migran a `colaboradores` con rol `escaner` global la primera vez que se corre
 `roles-equipo.sql`. `es_staff()` ahora significa "tiene algún rol en el Studio".
 
-## Cómo quedan los precios (cambió respecto de torino)
+## Cómo quedan los precios
 
-En torino el precio vivía en el evento (`precio_general` + un jsonb `lotes` con
-lotes secuenciales que avanzaban solos). **Acá no existe nada de eso.** Cada
-evento tiene N filas en `tipos_ticket`, todas a la venta al mismo tiempo, y el
-precio del evento es el más barato de los tipos que todavía tienen cupo.
+Dos piezas, y hay que tener clara la división:
 
-Por eso `eventos` no tiene `precio_general`, `lotes` ni `lote_activo`.
+- **`tipos_ticket`** es *qué* se vende (la entrada general, y aparte los combos
+  con botella).
+- **`lotes`** es *a cuánto y cuántas*. Un evento tiene una secuencia de lotes
+  (Early Bird, Lote 1, Lote 2, ...) y **cada uno tiene su nombre, su precio y
+  su cupo**.
+
+El **lote vigente es el primero por orden que todavía tenga cupo**. Cuando se
+llena, el siguiente pasa a ser el vigente sin que nadie toque nada: no hay
+ningún flag "activo" que mantener ni ningún cron. Si no queda ninguno con cupo,
+el evento se queda sin entradas. Todo eso lo resuelve la vista `lotes_publicos`
+(columna `vigente`).
+
+`cupo` en NULL = sin límite: ese lote no se agota nunca y los que vengan
+después quedan inalcanzables. Es lo correcto para el último de la fila; el
+Studio no te deja guardarlo en el medio.
+
+`aviso_ultimas` es el umbral del cartel **"¡Quedan las últimas N!"** de la
+página del evento: NULL = no mostrarlo nunca, un número = mostrarlo cuando
+resten esa cantidad o menos. Lo decide el organizador lote por lote — no es
+automático.
+
+Los **combos quedan afuera** (`tipos_ticket.usa_lotes = false`): conservan su
+`precio` y su `cantidad` propios, y sus ventas **no descuentan del cupo del
+lote** — llevan `compras.lote_id` en NULL.
+
+La escalera **es pública**: la página del evento muestra todos los lotes con su
+precio, el vigente marcado "en venta" y los siguientes "próximamente". Por eso
+`lotes_publicos` devuelve la secuencia entera. La tabla en crudo igual queda
+detrás de la vista, porque la vista es la que puede contar `compras` sin que el
+visitante pueda leerlas.
+
+`eventos` sigue sin tener `precio_general`, `lotes` ni `lote_activo` (el jsonb
+de torino): la secuencia es una tabla de verdad, no una columna.
 
 ## Lo que todavía no está y va a necesitar SQL nuevo
 
