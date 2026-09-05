@@ -118,8 +118,8 @@ body::before{
    sql/color-evento.sql (el spec original de esta función) dice explícito
    que el color por evento "reemplaza al naranja de la marca... en botones,
    tarjeta de ticket elegida, selector de cantidad, glows" de su página de
-   detalle. El botón se había quedado afuera: .tipo-card.elegida y
-   .tipo-qty .mas ya leían --accent (que si se re-tiñe por evento), pero
+   detalle. El botón se había quedado afuera: .entrada-box.elegida y
+   .entrada-qty .mas ya leían --accent (que sí se re-tiñe por evento), pero
    .btn seguía con el degradado fijo sin importar el color_acento del
    evento — se notaba en Jueves Picante (rojo) mostrando el botón naranja.
    Acá se lo re-tiñe SÓLO dentro de un contenedor con data-color-evento
@@ -170,8 +170,8 @@ h1 em{font-style:normal;color:var(--accent)}
 
 /* Etiqueta chica en mayúscula: labels de formulario, encabezados de tabla,
    títulos de sección. Un solo lugar donde se define el tratamiento. */
-label,.d-section-title,.tipos-titulo,.scan-list-head,th,.stat small,
-.form-grid label,.field label,.tipo-form-grid label,.attendee-tipo{
+label,.d-section-title,.scan-list-head,th,.stat small,
+.form-grid label,.field label,.lote-form-grid label,.attendee-tipo{
   font-size:0.75rem;
   font-weight:500;
   text-transform:uppercase;
@@ -565,11 +565,10 @@ body > nav{
   .d-flyer{max-width:320px;margin:0 auto}
 }
 
-/* ---------- TIPOS DE TICKET ----------
-   Una tarjeta por tipo: nombre arriba, línea fina, y abajo el precio a la
-   izquierda con el selector de cantidad a la derecha. */
-.tipos-grupo + .tipos-grupo{margin-top:32px}
-.tipos-titulo{color:var(--text);margin-bottom:16px}
+/* ---------- LA VENTA EN EL DETALLE ----------
+   La escalera de lotes arriba y, debajo, la caja de la entrada que se está
+   vendiendo con su selector de cantidad. El evento vende una sola entrada:
+   la del lote vigente. */
 .tipos-vacio{color:var(--text-dim);margin:0}
 
 /* La escalera de lotes. Se muestran todos: el vigente en blanco (o en el color
@@ -598,47 +597,45 @@ body > nav{
   margin:0 0 4px;font-size:0.875rem;font-weight:600;color:var(--accent);
 }
 
-.tipo-card{
+/* La caja de compra: nombre del lote y precio arriba, selector abajo */
+.entrada-box{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radio-card);
   padding:20px;transition:background var(--transicion),border-color var(--transicion);
 }
-.tipo-card + .tipo-card{margin-top:12px}
-.tipo-card:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25);box-shadow:var(--glow-suave)}
-/* Con cantidad elegida: la marca queda encendida aunque saques el mouse */
-.tipo-card.elegida{border-color:var(--accent);background:rgba(var(--acento-rgb),0.04)}
-.tipo-card.agotado{opacity:.45}
-.tipo-card.agotado:hover{background:var(--surface);border-color:var(--border)}
-.tipo-card.agotado .tipo-nombre{text-decoration:line-through}
-.tipo-nombre{font-size:0.9375rem;font-weight:600}
-.tipo-desc{color:var(--text-dim);font-size:0.875rem;margin-top:4px}
-.tipo-validez,.tipo-accesos{color:var(--text-faint);font-size:0.8125rem;margin-top:4px}
-.tipo-quedan{color:var(--accent);font-size:0.8125rem;font-weight:500;margin-top:8px}
-.tipo-card-pie{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  margin-top:16px;padding-top:16px;border-top:1px solid var(--border);
+.entrada-box:hover{background:var(--surface-2);border-color:rgba(var(--acento-rgb),0.25);box-shadow:var(--glow-suave)}
+/* Con cantidad elegida queda encendida aunque saques el mouse */
+.entrada-box.elegida{border-color:var(--accent);background:rgba(var(--acento-rgb),0.04)}
+.entrada-box.agotado{
+  opacity:.55;display:flex;align-items:center;justify-content:space-between;gap:16px;
 }
-.tipo-precio{font-size:1.5rem;font-weight:600;letter-spacing:-0.02em;color:var(--text);white-space:nowrap}
-.tipo-maximo{color:var(--text-faint);font-size:0.8125rem;margin-top:8px}
+.entrada-box.agotado:hover{background:var(--surface);border-color:var(--border);box-shadow:none}
+.entrada-top{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border);
+}
+.entrada-box.agotado .entrada-top{padding:0;margin:0;border:none}
+.entrada-nombre{font-size:0.9375rem;font-weight:600}
+.entrada-precio{font-size:1.5rem;font-weight:600;letter-spacing:-0.02em;color:var(--text);white-space:nowrap}
 .tipo-tag{
   font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;
   color:var(--text-dim);white-space:nowrap;
 }
 /* Selector: − sobre superficie, + en blanco con el signo negro */
-.tipo-qty{display:flex;align-items:center;gap:12px;flex-shrink:0}
-.tipo-qty button{
+.entrada-qty{display:flex;align-items:center;justify-content:flex-end;gap:12px}
+.entrada-qty button{
   width:32px;height:32px;border-radius:999px;border:1px solid var(--border);cursor:pointer;
   font-family:inherit;font-size:1.125rem;line-height:1;
   display:flex;align-items:center;justify-content:center;
   transition:background var(--transicion),opacity var(--transicion);
 }
-.tipo-qty button.menos{background:var(--surface-2);color:var(--text)}
-.tipo-qty button.menos:hover{background:#22222A}
+.entrada-qty button.menos{background:var(--surface-2);color:var(--text)}
+.entrada-qty button.menos:hover{background:#22222A}
 /* El "+" toma el acento (naranja de la marca, o el color propio del evento
    cuando el detalle declara uno). Usa la variable, no un hex, para que el
    scope de [data-color-evento] lo alcance sin reescribir la regla. */
-.tipo-qty button.mas{background:var(--accent);border-color:var(--accent);color:#0A0A0A}
-.tipo-qty button.mas:hover{opacity:.9}
-.tipo-qty span{font-size:1rem;font-weight:600;min-width:16px;text-align:center}
+.entrada-qty button.mas{background:var(--accent);border-color:var(--accent);color:#0A0A0A}
+.entrada-qty button.mas:hover{opacity:.9}
+.entrada-qty span{font-size:1rem;font-weight:600;min-width:16px;text-align:center}
 
 .d-resumen{margin-top:24px;padding-top:16px;border-top:1px solid var(--border)}
 .d-resumen .total{margin:12px 0 0;padding-top:12px}
@@ -960,7 +957,7 @@ body > nav{
 .dash-nav-item:hover{background:var(--surface-2);color:var(--text)}
 /* Activo: fondo --surface-2 y texto --accent, sin borde -- spec explícita
    del rediseño del Studio. Antes llevaba un borde + fondo naranja a alfa
-   bajo; ese tratamiento se usa en otro lado (.tipo-card.elegida) pero acá
+   bajo; ese tratamiento se usa en otro lado (.entrada-box.elegida) pero acá
    se pidió este más simple. */
 .dash-nav-item.activo{background:var(--surface-2);color:var(--accent)}
 .dash-side-pie{display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-top:1px solid var(--border)}
@@ -1197,27 +1194,6 @@ tbody tr{transition:background var(--transicion)}
 tbody tr:hover td{background:var(--surface)}
 tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:500}
 
-/* ---------- PANEL: EDITOR DE TIPOS ---------- */
-.tipo-form{background:var(--bg);border:1px solid var(--border);border-radius:var(--radio-card);padding:16px;margin-bottom:12px}
-.tipo-form.pausado{opacity:.55}
-.tipo-form-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.tipo-form-num{font-size:0.8125rem;font-weight:600;color:var(--text-faint);min-width:18px}
-.tipo-form-nombre{flex:1;font-weight:600}
-.tipo-form-acciones{display:flex;gap:8px}
-.tipo-form-acciones .btn-mini{padding:6px 10px;font-size:0.75rem}
-.tipo-form-acciones .btn-mini[disabled]{opacity:.35;cursor:default}
-.tipo-form-desc{margin-bottom:12px}
-.tipo-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
-.tipo-form-grid label{margin-bottom:0}
-.tipo-form-grid input,.tipo-form-grid select{margin-top:8px;font-size:0.875rem;padding:10px 12px}
-.tipo-form-pie{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;flex-wrap:wrap}
-.tipo-form-check{display:flex;align-items:center;gap:8px;font-size:0.875rem;color:var(--text-dim);cursor:pointer}
-.tipo-form-check input{width:auto;margin:0}
-.tipo-form-vendidas{color:var(--text-faint);font-size:0.8125rem}
-/* Los que van por lote no muestran precio ni cupo propios: en su lugar va la
-   nota que dice de dónde salen, con el mismo alto que tendría un campo. */
-.tipo-form-porlote span{display:block;margin-top:8px;font-size:0.8125rem;color:var(--text-faint);line-height:1.5;text-transform:none;letter-spacing:normal}
-
 /* ---------- PANEL: EDITOR DE LOTES ----------
    Mismo lenguaje que el editor de tipos; lo único propio es el cartel de
    estado, que dice cuál se está vendiendo ahora. */
@@ -1238,6 +1214,8 @@ tfoot td{border-top:1px solid var(--border);background:var(--surface);color:var(
 .lote-form-grid input{margin-top:8px;font-size:0.875rem;padding:10px 12px}
 .lote-form-vendidas{color:var(--text-faint);font-size:0.8125rem;padding-bottom:10px}
 .lotes-vacio{color:var(--text-dim);font-size:0.8125rem;margin-bottom:12px}
+/* De qué lote sale la cortesía que se está por emitir */
+.cor-lote{color:var(--text-dim);font-size:0.8125rem;margin:0}
 
 /* ---------- PANEL: AVANCE DE LOTES EN ANALYTICS ---------- */
 .lotes-an{margin-bottom:20px}
@@ -1530,26 +1508,6 @@ footer{border-top:1px solid var(--border);padding:48px 24px;text-align:center;co
   .kpi b{font-size:1.375rem}
 
   /* Desglose por tipo: una tarjeta por tipo, igual que Compradores */
-  .tabla-tipos-wrap{border:none;border-radius:0;overflow:visible}
-  .tabla-tipos-an{min-width:0}
-  .tabla-tipos-an thead{display:none}
-  .tabla-tipos-an tbody{display:block}
-  .tabla-tipos-an tr{
-    display:flex;flex-direction:column;
-    background:var(--bg);border:1px solid var(--border);border-radius:var(--radio-card);
-    padding:12px 14px;margin-bottom:8px;
-  }
-  .tabla-tipos-an td{
-    display:flex;justify-content:space-between;align-items:center;gap:12px;
-    padding:6px 0;border-bottom:1px solid var(--border);text-align:right;
-  }
-  .tabla-tipos-an td:last-child{border-bottom:none}
-  .tabla-tipos-an td::before{content:attr(data-label);flex-shrink:0;color:var(--text-faint);font-size:0.75rem;text-align:left}
-  .tabla-tipos-nombre{
-    display:block;text-align:left;font-size:0.9375rem;
-    padding:0 0 8px;margin-bottom:4px;border-bottom:1px solid var(--border);
-  }
-  .tabla-tipos-nombre::before{content:none}
   .an-pct{min-width:0;max-width:60%}
 }
 

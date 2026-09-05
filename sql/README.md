@@ -12,7 +12,7 @@ desde el SQL Editor:
 | 5 | `roles-equipo.sql` | Roles del equipo: tablas `colaboradores` y `colaborador_rol` + las policies de cada rol. **Redefine `es_admin()` y `es_staff()`** de `02-rls.sql`, así que va siempre después |
 | 6 | `evento-vistas.sql` | Tabla `evento_vistas` (visitas a la página de cada evento) para el KPI "Vistas" y el gráfico de Analytics del Studio. Usa `es_encargado()`, así que va después de `roles-equipo.sql` |
 | 7 | `cortesias.sql` | Columna `compras.origen` (`venta`/`cortesia`) + la policy que deja al organizador y a los encargados emitir entradas de invitación desde el Studio. También usa `es_encargado()` |
-| 8 | `lotes.sql` | **Lotes**: tabla `lotes`, la vista `lotes_publicos`, `tipos_ticket.usa_lotes`, `compras.lote_id`/`lote` y la migración de lo que ya estaba cargado. Usa `es_escaner()` y `es_encargado()`, así que va después de `roles-equipo.sql` |
+| 8 | `lotes.sql` | **Lotes**: tabla `lotes`, la vista `lotes_publicos`, `compras.lote_id`/`lote` y la migración de lo que ya estaba cargado. Deja `tipos_ticket` sin uso. Usa `es_escaner()` y `es_encargado()`, así que va después de `roles-equipo.sql` |
 
 Se pueden correr de nuevo sin romper nada: todo es `create ... if not exists` /
 `create or replace` / `drop policy if exists`.
@@ -71,13 +71,10 @@ migran a `colaboradores` con rol `escaner` global la primera vez que se corre
 
 ## Cómo quedan los precios
 
-Dos piezas, y hay que tener clara la división:
-
-- **`tipos_ticket`** es *qué* se vende (la entrada general, y aparte los combos
-  con botella).
-- **`lotes`** es *a cuánto y cuántas*. Un evento tiene una secuencia de lotes
-  (Early Bird, Lote 1, Lote 2, ...) y **cada uno tiene su nombre, su precio y
-  su cupo**.
+**Un evento vende UNA entrada**, y todo lo que la define vive en `lotes`: la
+secuencia de etapas del evento (Early Bird, Lote 1, Lote 2, ...), **cada una
+con su nombre, su precio y su cupo**. No hay tipos de ticket, ni categorías,
+ni combos.
 
 El **lote vigente es el primero por orden que todavía tenga cupo**. Cuando se
 llena, el siguiente pasa a ser el vigente sin que nadie toque nada: no hay
@@ -94,9 +91,13 @@ página del evento: NULL = no mostrarlo nunca, un número = mostrarlo cuando
 resten esa cantidad o menos. Lo decide el organizador lote por lote — no es
 automático.
 
-Los **combos quedan afuera** (`tipos_ticket.usa_lotes = false`): conservan su
-`precio` y su `cantidad` propios, y sus ventas **no descuentan del cupo del
-lote** — llevan `compras.lote_id` en NULL.
+Cada fila de `compras` guarda el **nombre** del lote en `tipo` (es lo que
+muestran el escáner y "Mis Entradas") y su id en `lote_id`, que es de donde
+sale el conteo del cupo. `tipo_ticket_id` queda siempre en NULL.
+
+⚠️ **`tipos_ticket` quedó sin uso.** No se borró porque las compras viejas la
+referencian por `tipo_ticket_id`, pero la aplicación no la lee ni la escribe
+más — igual que `staff`.
 
 La escalera **es pública**: la página del evento muestra todos los lotes con su
 precio, el vigente marcado "en venta" y los siguientes "próximamente". Por eso
@@ -109,13 +110,9 @@ de torino): la secuencia es una tabla de verdad, no una columna.
 
 ## Lo que todavía no está y va a necesitar SQL nuevo
 
-- **Tickets ocultos**: la columna `oculto` y `codigo_acceso` ya están en
-  `tipos_ticket`, pero la policy pública los esconde y no hay forma de
-  desbloquearlos. Cuando se implemente hace falta una función RPC que reciba el
-  código y devuelva los tipos que coinciden (no se puede resolver con una policy
-  sola sin filtrar el código al cliente).
-- **Vale de botella de los combos**: va a necesitar su propia tabla o una
-  columna de tipo en `compras`.
+- **Tickets ocultos** y **combos con vale de botella**: se fueron junto con los
+  tipos de ticket. Si vuelven hay que repensarlos sobre el modelo de lotes, no
+  reactivar las columnas viejas de `tipos_ticket`.
 - **Entrega diferida** de las entradas (X horas antes del evento): columna en
   `eventos` + un cron que dispare los mails.
 </content>

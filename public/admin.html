@@ -151,21 +151,12 @@
               <div class="kpis" id="ev-kpis"></div>
               <p class="ev-cortesias-nota" id="ev-cortesias-nota" style="display:none"></p>
 
-              <div class="dash-card lotes-an" id="ev-an-lotes" style="display:none"></div>
-
               <div class="dash-card" style="margin-bottom:20px">
                 <div class="ev-an-head">
-                  <h3 style="border:none;margin:0">Ventas por tipo de ticket</h3>
+                  <h3 style="border:none;margin:0">Ventas por lote</h3>
                   <button class="btn ghost btn-mini" onclick="descargarVentasEvento()">Descargar</button>
                 </div>
-                <div class="table-wrap tabla-tipos-wrap" style="margin-top:16px">
-                  <table class="tabla-tipos-an">
-                    <thead><tr>
-                      <th>Tipo</th><th>Vendidos</th><th>Disponibles</th><th>% vendido</th><th>Recaudación</th>
-                    </tr></thead>
-                    <tbody id="ev-an-tipos"></tbody>
-                  </table>
-                </div>
+                <div class="lotes-an" id="ev-an-lotes" style="display:none"></div>
               </div>
 
               <div class="dash-card">
@@ -208,18 +199,8 @@
               </div>
 
               <div class="full">
-                <label style="margin-bottom:8px">Tipos de entrada</label>
-                <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Las entradas que se venden en este evento, en el orden que les des acá. El <b>precio y el cupo de los tickets los ponen los lotes</b> (abajo), así que acá no se cargan. Los que marques como <b>Combos</b> quedan afuera de los lotes: llevan precio y cupo propios y van en su propia sección, debajo de los tickets.</p>
-                <div id="tipos-list"></div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-                  <button class="btn ghost" onclick="agregarTipo('ticket')">+ Agregar ticket</button>
-                  <button class="btn ghost" onclick="agregarTipo('combo')">+ Agregar combo</button>
-                </div>
-              </div>
-
-              <div class="full">
-                <label style="margin-bottom:8px">Lotes</label>
-                <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Se vende <b>un lote por vez</b>: el primero de la lista que todavía tenga cupo. Cuando se llena, el evento pasa solo al siguiente y la página empieza a cobrar el precio nuevo — no hay que tocar nada. En la página del evento se ve <b>la escalera entera</b>: el que está en venta y los que vienen, con su precio, en gris. Dejá el cupo vacío sólo en el último (un lote sin cupo no se agota nunca y tapa a los que siguen). El aviso <b>"quedan las últimas N"</b> aparece sólo si le cargás el número: vacío = no avisar.</p>
+                <label style="margin-bottom:8px">Lotes (las entradas del evento)</label>
+                <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 12px">Acá se define <b>todo lo que se vende</b>: el evento tiene una entrada, y el lote le pone el precio y el cupo. Se vende <b>un lote por vez</b>, el primero de la lista que todavía tenga cupo; cuando se llena, el evento pasa solo al siguiente y empieza a cobrar el precio nuevo — no hay que tocar nada. En la página se ve <b>la escalera entera</b>: el que está en venta y los que vienen, con su precio, en gris. Dejá el cupo vacío sólo en el último (un lote sin cupo no se agota nunca y tapa a los que siguen). El aviso <b>"quedan las últimas N"</b> aparece sólo si le cargás el número: vacío = no avisar.</p>
                 <div id="lotes-list"></div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
                   <button class="btn ghost" onclick="agregarLote()">+ Agregar lote</button>
@@ -358,8 +339,7 @@
                 <select id="cor-evento" onchange="corCambiarEvento()"></select>
               </div>
               <div class="full">
-                <label for="cor-tipo">Tipo de entrada</label>
-                <select id="cor-tipo"></select>
+                <p class="cor-lote" id="cor-lote"></p>
               </div>
               <div><label for="cor-nombre">Nombre del invitado (opcional)</label><input id="cor-nombre" placeholder="Nombre"></div>
               <div><label for="cor-apellido">Apellido (opcional)</label><input id="cor-apellido" placeholder="Apellido"></div>

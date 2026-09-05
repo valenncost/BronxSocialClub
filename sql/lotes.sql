@@ -21,11 +21,13 @@
 -- marcado "en venta" y los que vienen "próximamente", en gris. Por eso
 -- lotes_publicos deja leer la secuencia entera y no sólo el vigente.
 --
--- LOS COMBOS QUEDAN AFUERA
--- tipos_ticket.usa_lotes = false ⇒ ese tipo conserva su precio y su cupo
--- propios (tipos_ticket.precio / tipos_ticket.cantidad). Es el caso de los
--- combos con botella. Sus ventas NO descuentan del cupo del lote: llevan
--- compras.lote_id = null.
+-- ⚠️ tipos_ticket QUEDÓ SIN USO
+-- El evento vende UNA entrada, la del lote vigente: no hay más tipos de
+-- ticket, ni categorías, ni combos. La tabla tipos_ticket sigue en la base
+-- (como staff o galeria) porque las compras viejas la referencian por
+-- tipo_ticket_id, pero la aplicación no la lee ni la escribe más. Las compras
+-- nuevas guardan el NOMBRE DEL LOTE en compras.tipo y el id en compras.lote_id,
+-- con tipo_ticket_id en null.
 -- ============================================================
 
 
@@ -55,10 +57,6 @@ create index if not exists lotes_evento_idx on public.lotes (evento_id, orden);
 -- ============================================================
 -- COLUMNAS NUEVAS
 -- ============================================================
--- Quién toma el precio del lote y quién conserva el suyo (los combos).
-alter table public.tipos_ticket
-  add column if not exists usa_lotes boolean not null default true;
-
 -- En qué lote se vendió cada entrada. Se guarda el id Y el nombre, igual que
 -- evento/evento_id y tipo/tipo_ticket_id: la entrada tiene que seguir siendo
 -- legible aunque después se borre el lote.
@@ -132,28 +130,19 @@ create policy lotes_escritura_encargado on public.lotes
 -- MIGRACIÓN DE LO QUE YA ESTABA CARGADO
 -- ============================================================
 -- Los eventos que ya existen pasan a tener un único "Lote 1" SIN CUPO: no se
--- agota solo, así que el sitio se sigue comportando como antes hasta que el
--- organizador arme la escalera real desde el Studio.
+-- agota solo, así que el evento se sigue vendiendo hasta que el organizador
+-- arme la escalera real desde el Studio.
 --
--- ⚠️ El precio del lote sale del ticket MÁS CARO que tuviera el evento, no del
--- más barato. Antes cada tipo tenía su precio; ahora hay UNO SOLO por lote, y
--- no existe una traducción correcta para un evento con cinco precios
--- distintos. Se toma el más caro porque el error barato es el que no se puede
--- deshacer: si queda bajo, se vende a menos de lo que vale y esas ventas ya
--- están hechas. HAY QUE REVISARLO EVENTO POR EVENTO después de migrar.
---
--- Ojo también: GENERAL 1 ($8.000) y GENERAL 2 ($10.000) del "Cachengue" son de
--- hecho dos lotes escritos como dos tipos distintos. La migración NO los une
--- (no hay forma de adivinar el cupo del primero): hay que rearmarlos a mano
--- como un tipo GENERAL con su Lote 1 y su Lote 2.
-
--- Los combos conservan precio y cupo propios; el resto va por lote.
-update public.tipos_ticket
-   set usa_lotes = (categoria <> 'combo');
+-- ⚠️ El precio sale del ticket MÁS CARO que tuviera el evento. Antes cada tipo
+-- tenía el suyo; ahora hay UN SOLO precio por lote, y no existe traducción
+-- correcta para un evento que vendía a cinco precios distintos. Se toma el más
+-- caro porque el error barato es el que no se puede deshacer: si queda bajo se
+-- vende a menos de lo que vale, y esas ventas ya están hechas.
+-- HAY QUE REVISARLO EVENTO POR EVENTO desde el Studio después de migrar.
 
 insert into public.lotes (evento_id, nombre, orden, precio, cupo, aviso_ultimas)
 select t.evento_id, 'Lote 1', 0, max(t.precio), null, null
 from public.tipos_ticket t
-where t.usa_lotes
+where t.categoria <> 'combo'
   and not exists (select 1 from public.lotes l where l.evento_id = t.evento_id)
 group by t.evento_id;

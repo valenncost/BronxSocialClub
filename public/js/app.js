@@ -79,15 +79,9 @@ async function uploadFoto(file){
 const DEMO_EVENTS = [
   {id:1, nombre:"Cachengue es de Bronx", fecha_texto:"Sáb 5 Sep 2026", lugar:"Bronx Social Club", puertas:"Cena 22hs · Previa 00hs · Cachengue 01:30", arte:"red", color_acento:"violeta", agotado:false, ubicacion_secreta:false, descripcion:"El sábado clásico de Bronx. Cena, previa y cachengue hasta las 6. +18 con documento.", foto_url:null, direccion:"Casanova 888, Bahía Blanca"},
 ];
-/* El precio de los tipos con usa_lotes lo pone el lote vigente, no la fila:
-   por eso GENERAL va con precio 0 acá. El combo, que no va por lote,
-   conserva el suyo. */
-const DEMO_TIPOS = [
-  {id:102, evento_id:1, nombre:"GENERAL", descripcion:"Desde las 23:30, sin límite de horario.", precio:0, cantidad:null, orden:0, categoria:"ticket", accesos:1, activo:true, oculto:false, usa_lotes:true, valido_desde:"23:30", valido_hasta:null},
-  {id:104, evento_id:1, nombre:"5 ACCESOS + BOTELLA DE FERNET", descripcion:"Branca 1L con Coca.", precio:115000, cantidad:10, orden:1, categoria:"combo", accesos:5, activo:true, oculto:false, usa_lotes:false, valido_desde:null, valido_hasta:null},
-];
-/* La escalera: Early Bird con cupo chico (para ver el salto vendiendo pocas)
-   y con aviso de últimas, y el último sin cupo, que no se agota nunca. */
+/* La escalera del evento: es todo lo que define qué se vende y a cuánto.
+   Early Bird con cupo chico (para ver el salto vendiendo pocas) y con aviso
+   de últimas, y el último sin cupo, que no se agota nunca. */
 const DEMO_LOTES = [
   {id:201, evento_id:1, nombre:"Early Bird", orden:0, precio:16000, cupo:100, aviso_ultimas:10},
   {id:202, evento_id:1, nombre:"Lote 1", orden:1, precio:18000, cupo:150, aviso_ultimas:null},
@@ -144,8 +138,9 @@ function go(p){
 }
 
 
-/* ================== TIPOS DE TICKET Y LOTES ==================
-   El precio y el cupo de un evento salen de su secuencia de LOTES:
+/* ================== LOTES ==================
+   Un evento vende UNA entrada. El precio y el cupo de esa entrada salen de la
+   secuencia de LOTES del evento — no hay tipos, ni categorías, ni combos:
 
      * Cada lote tiene nombre, precio y cupo (Early Bird $16.000 · 100,
        Lote 1 $18.000 · 150, ...).
@@ -156,64 +151,17 @@ function go(p){
      * La escalera se muestra ENTERA en la página del evento: el vigente
        marcado "en venta" y los que vienen "próximamente", en gris.
 
-   Los COMBOS quedan afuera de los lotes (usa_lotes = false): conservan su
-   precio y su cupo propios, y sus ventas no descuentan del cupo del lote.
-   Todo esto está explicado en sql/lotes.sql, que es la fuente de verdad. */
-const CATEGORIAS = [
-  { clave:"ticket", titulo:"Tickets" },
-  { clave:"combo",  titulo:"Combos" }
-];
-const MAX_POR_TIPO = 10;   // tope de unidades del mismo tipo en una compra
+   El lote ES la entrada: entradaALaVenta() arma con el lote vigente el mismo
+   objeto {id, nombre, precio, ...} que el checkout venía esperando, así que
+   de ahí para adelante (CANTIDAD, CK, crear-pago) nada cambió de forma.
 
-let TIPOS = {};        // { evento_id: [tipo, ...] } ya ordenados
-let VENTAS_TIPO = {};  // { tipo_ticket_id: entradas aprobadas }
-let VENTAS_VISTA_OK = false;
+   La tabla tipos_ticket quedó sin uso — como staff o galeria, sigue en la base
+   por las compras viejas que la referencian, pero no la lee nadie.
+   sql/lotes.sql es la fuente de verdad del modelo. */
+const MAX_POR_COMPRA = 10;   // tope de entradas en una misma compra
 
 let LOTES = {};         // { evento_id: [lote, ...] } ordenados por "orden"
 let VENTAS_LOTE = {};   // { lote_id: entradas aprobadas }
-
-function agruparTipos(filas){
-  TIPOS = {};
-  (Array.isArray(filas) ? filas : []).forEach(t=>{
-    (TIPOS[t.evento_id] = TIPOS[t.evento_id] || []).push(t);
-  });
-  Object.values(TIPOS).forEach(a => a.sort((x,y)=> (x.orden - y.orden) || (x.id - y.id)));
-}
-/* En la página pública se piden solo los que se venden; en el admin se piden
-   todos, porque el panel también edita los pausados. */
-async function cargarTipos(todos=false){
-  if(DEMO){ agruparTipos(DEMO_TIPOS); return; }
-  const q = todos
-    ? "order=orden.asc,id.asc"
-    : "activo=eq.true&oculto=eq.false&order=orden.asc,id.asc";
-  try{ agruparTipos(await dbGet("tipos_ticket", q)); }
-  catch(e){ TIPOS = {}; console.warn("No se pudieron leer los tipos de ticket:", e.message); }
-}
-
-/* Cuántas se vendieron de cada tipo. El público lo lee de la vista
-   ventas_por_tipo (solo totales: la tabla compras tiene los códigos de la
-   puerta y no la puede leer). El admin lo recalcula desde PURCHASES. */
-async function cargarVentasTipo(){
-  VENTAS_TIPO = {}; VENTAS_VISTA_OK = false;
-  if(DEMO) return;
-  try{
-    const filas = await dbGet("ventas_por_tipo", "select=tipo_ticket_id,vendidas");
-    if(!Array.isArray(filas)) return;
-    filas.forEach(f=>{ VENTAS_TIPO[f.tipo_ticket_id] = Number(f.vendidas) || 0; });
-    VENTAS_VISTA_OK = true;
-  }catch(e){
-    // Sin la vista no hay conteos: los cupos no se cierran solos.
-    console.warn("No se pudo leer ventas_por_tipo:", e.message);
-  }
-}
-function ventasTipoDesdePurchases(){
-  const m = {};
-  PURCHASES.forEach(c=>{
-    if((c.estado||"").toLowerCase() !== "aprobado" || !c.tipo_ticket_id) return;
-    m[c.tipo_ticket_id] = (m[c.tipo_ticket_id] || 0) + 1;
-  });
-  return m;
-}
 
 /* ---------- Lotes ----------
    El público lee la vista lotes_publicos, que trae la secuencia entera de
@@ -270,80 +218,43 @@ function restantesLote(l){ return l.cupo == null ? Infinity : Math.max(0, Number
 function loteVigenteDe(evId){ return lotesDeEvento(evId).find(l => restantesLote(l) > 0) || null; }
 function loteVigente(ev){ return ev ? loteVigenteDe(ev.id) : null; }
 
-function tiposDeEvento(evId){ return TIPOS[evId] || []; }
-// Los combos van con precio y cupo propios; el resto toma los del lote
-function usaLotes(t){ return t.usa_lotes !== false; }
-/* El precio de hoy: el del lote vigente, o el propio si el tipo no va por
-   lote (los combos). null = no hay lote vigente, o sea que se agotaron todos
-   y ya no se vende nada de eso. */
-function precioTipo(t){
-  if(!usaLotes(t)) return Number(t.precio) || 0;
-  const l = loteVigenteDe(t.evento_id);
-  return l ? (Number(l.precio) || 0) : null;
+/* LA ENTRADA QUE SE VENDE HOY.
+   Es el lote vigente, presentado con la forma que espera el resto del código
+   (checkout incluido): id, nombre y precio. `id` es el id del lote, que es lo
+   que después viaja como compras.lote_id. null = no hay nada para vender,
+   porque el evento no tiene lotes o porque se agotaron todos. */
+function entradaALaVenta(ev){
+  if(!ev) return null;
+  const l = loteVigenteDe(ev.id);
+  if(!l) return null;
+  return {
+    id: l.id,
+    nombre: l.nombre,
+    precio: Number(l.precio) || 0,
+    evento_id: ev.id,
+    accesos: 1,
+    lote: l
+  };
 }
-// Un tipo por lote en un evento sin ningún lote cargado no se puede vender
-function tipoConfigurado(t){ return !usaLotes(t) || lotesDeEvento(t.evento_id).length > 0; }
-// Los que ve el comprador: activos, no ocultos y con la venta ya armada
-function tiposALaVenta(ev){
-  return tiposDeEvento(ev.id).filter(t => t.activo && !t.oculto && tipoConfigurado(t));
+// Lo que queda por vender del lote vigente
+function restantesEvento(ev){
+  const l = loteVigente(ev);
+  return l ? restantesLote(l) : 0;
 }
-function vendidasTipo(t){ return Number(VENTAS_TIPO[t.id]) || 0; }
-/* Lo que queda de un tipo. Si va por lote el cupo es del LOTE y es una bolsa
-   compartida entre todas las categorías que van por lote: si el Lote 1 tiene
-   200, esos 200 se reparten entre GENERAL, TERRAZA y las que haya. Un combo
-   conserva su cupo propio, y cantidad null = sin límite. */
-function restantesTipo(t){
-  if(usaLotes(t)){
-    const l = loteVigenteDe(t.evento_id);
-    return l ? restantesLote(l) : 0;
-  }
-  return t.cantidad == null ? Infinity : Math.max(0, t.cantidad - vendidasTipo(t));
-}
-function tipoAgotado(t){ return restantesTipo(t) <= 0; }
-function tipoDisponible(t){ return !tipoAgotado(t); }
+// Cuántas entradas más se pueden sumar a esta compra
+function topeCompra(ev){ return Math.min(MAX_POR_COMPRA, restantesEvento(ev)); }
 
-/* Unidades ya elegidas que salen del cupo de un lote, sin contar el tipo que
-   se está tocando. Como el cupo es del lote, el tope de una categoría depende
-   de lo que ya se haya puesto en las otras. */
-function seleccionadasDelLote(loteId, exceptoTipoId){
-  if(!cur) return 0;
-  return tiposALaVenta(cur).reduce((a,t)=>{
-    if(t.id === exceptoTipoId || !usaLotes(t)) return a;
-    const l = loteVigenteDe(t.evento_id);
-    return (l && l.id === loteId) ? a + (Number(SELECCION[t.id]) || 0) : a;
-  }, 0);
-}
-// Cuántas unidades más de este tipo se pueden sumar a la compra
-function topeTipo(t){
-  let restan = restantesTipo(t);
-  if(usaLotes(t)){
-    const l = loteVigenteDe(t.evento_id);
-    if(l) restan = Math.max(0, restan - seleccionadasDelLote(l.id, t.id));
-  }
-  return Math.min(MAX_POR_TIPO, restan);
-}
-
-// El "Desde $X" de la tarjeta: el más barato de los que todavía tienen cupo
+// El precio de hoy: el del lote vigente. null si no hay nada a la venta.
 function precioDesde(ev){
-  const precios = tiposALaVenta(ev).filter(tipoDisponible)
-    .map(t => precioTipo(t)).filter(p => p != null);
-  return precios.length ? Math.min(...precios) : null;
+  const e = entradaALaVenta(ev);
+  return e ? e.precio : null;
 }
-// Sin ningún tipo cargado el evento está anunciado pero todavía no se vende
-function sinVenta(ev){ return tiposALaVenta(ev).length === 0; }
-// Agotado a mano desde el panel, o porque se acabó el cupo de todos los tipos
+// Sin lotes cargados el evento está anunciado pero todavía no se vende
+function sinVenta(ev){ return lotesDeEvento(ev.id).length === 0; }
+// Agotado a mano desde el panel, o porque se acabaron todos los lotes
 function eventoAgotado(ev){
   if(ev.agotado) return true;
-  const ts = tiposALaVenta(ev);
-  return ts.length > 0 && ts.every(tipoAgotado);
-}
-
-// Texto de validez horaria, ej: "Válido de 23:30 a 02:00"
-function textoValidez(t){
-  if(t.valido_desde && t.valido_hasta) return `Válido de ${t.valido_desde} a ${t.valido_hasta}`;
-  if(t.valido_desde) return `Válido desde ${t.valido_desde}`;
-  if(t.valido_hasta) return `Válido hasta ${t.valido_hasta}`;
-  return "";
+  return !sinVenta(ev) && loteVigente(ev) == null;
 }
 const servicioDe = precio => Math.round((Number(precio) || 0) * SERVICIO_PCT);
 
@@ -498,7 +409,7 @@ function iniciarHeroCarrusel(){
 
 /* ================== DETALLE ================== */
 let cur = null;       // el evento abierto en el detalle
-let SELECCION = {};   // { tipo_ticket_id: cantidad elegida }
+let CANTIDAD = 0;   // entradas elegidas del lote vigente
 
 const EDAD_MINIMA_DEFECTO = 18;
 
@@ -596,7 +507,7 @@ function openDetail(id, empujarURL=true){
   if(galSec) galSec.style.display = "none";
 
   cur = ev;
-  SELECCION = {};
+  CANTIDAD = 0;
   renderTiposDetalle(ev);
 
   go('detalle');
@@ -642,29 +553,43 @@ async function registrarVistaEvento(eventoId){
   }catch(e){ /* silencio: una visita no contada no le arruina la compra a nadie */ }
 }
 
-/* ================== LISTA DE TIPOS EN EL DETALLE ==================
-   Las categorías a la venta, agrupadas en TICKETS y COMBOS, cada una con su
-   propio selector de cantidad y con el precio del LOTE VIGENTE. La selección
-   vive en SELECCION y se lleva tal cual al modal de compra. */
+/* ================== LA VENTA EN EL DETALLE ==================
+   La escalera de lotes y, debajo, el selector de cantidad de la entrada que
+   se está vendiendo (el lote vigente). La cantidad vive en CANTIDAD y se
+   lleva tal cual al modal de compra. */
 function renderTiposDetalle(ev){
   const box = document.getElementById("d-tipos");
   if(!box) return;
-  const agotado = eventoAgotado(ev);
-  const tipos = tiposALaVenta(ev);
 
-  if(!tipos.length){
+  if(sinVenta(ev)){
     box.innerHTML = `<p class="tipos-vacio">Todavía no hay entradas a la venta para este evento.</p>`;
   } else {
-    box.innerHTML = escaleraLotesHTML(ev, tipos) + CATEGORIAS.map(cat=>{
-      const delGrupo = tipos.filter(t => (t.categoria || "ticket") === cat.clave);
-      if(!delGrupo.length) return "";
-      return `<div class="tipos-grupo">
-        <h4 class="tipos-titulo">${cat.titulo}</h4>
-        ${delGrupo.map(t => filaTipoHTML(t, agotado)).join("")}
-      </div>`;
-    }).join("");
+    box.innerHTML = escaleraLotesHTML(ev) + selectorEntradaHTML(ev);
   }
   actualizarResumenDetalle();
+}
+/* El selector de cantidad. El nombre y el precio son los del lote vigente:
+   es la única entrada que existe. Agotado el último lote, queda el cartel y
+   nada que tocar. */
+function selectorEntradaHTML(ev){
+  const entrada = entradaALaVenta(ev);
+  if(!entrada || ev.agotado){
+    return `<div class="entrada-box agotado">
+      <div class="entrada-nombre">Entradas agotadas</div>
+      <span class="tipo-tag">Agotado</span>
+    </div>`;
+  }
+  return `<div class="entrada-box${CANTIDAD > 0 ? " elegida" : ""}" id="entrada-box">
+    <div class="entrada-top">
+      <div class="entrada-nombre">${esc(entrada.nombre)}</div>
+      <div class="entrada-precio">${fmt(entrada.precio)}</div>
+    </div>
+    <div class="entrada-qty">
+      <button class="menos" onclick="chCantidad(-1)" aria-label="Menos">−</button>
+      <span id="qty-entrada">${CANTIDAD}</span>
+      <button class="mas" onclick="chCantidad(1)" aria-label="Más">+</button>
+    </div>
+  </div>`;
 }
 /* La escalera de lotes: se muestran TODOS, con su precio. El vigente va
    marcado "en venta" y los que siguen "próximamente", en gris — el comprador
@@ -674,9 +599,9 @@ function renderTiposDetalle(ev){
    El "Quedan las últimas N!" no es automático: sale sólo si el organizador le
    cargó un umbral a ese lote (aviso_ultimas) y las restantes ya bajaron de
    ahí. Sin umbral, no se muestra nunca. */
-function escaleraLotesHTML(ev, tipos){
+function escaleraLotesHTML(ev){
   const lotes = lotesDeEvento(ev.id);
-  if(!lotes.length || !tipos.some(usaLotes)) return "";
+  if(!lotes.length) return "";
   const vig = loteVigente(ev);
   const filas = lotes.map(l=>{
     const esVigente = vig && vig.id === l.id;
@@ -695,67 +620,23 @@ function escaleraLotesHTML(ev, tipos){
   }).join("");
   return `<div class="lote-escalera">${filas}</div>`;
 }
-function filaTipoHTML(t, eventoAgotadoYa){
-  const sinCupo = eventoAgotadoYa || tipoAgotado(t);
-  const restan = restantesTipo(t);
-  const precio = precioTipo(t);
-  const validez = textoValidez(t);
-  const detalles = [];
-  if(t.descripcion) detalles.push(`<div class="tipo-desc">${esc(t.descripcion)}</div>`);
-  if(validez) detalles.push(`<div class="tipo-validez">${esc(validez)}</div>`);
-  if(Number(t.accesos) > 1) detalles.push(`<div class="tipo-accesos">Entran ${Number(t.accesos)} personas</div>`);
-  // Los que van por lote comparten el cupo: ese "quedan" ya está en la cabecera
-  if(!usaLotes(t) && !sinCupo && restan !== Infinity && restan <= 10) detalles.push(`<div class="tipo-quedan">Quedan ${restan}</div>`);
-
-  const elegidas = Number(SELECCION[t.id]) || 0;
-  const control = sinCupo
-    ? `<span class="tipo-tag">Agotado</span>`
-    : `<div class="tipo-qty">
-         <button class="menos" onclick="chTipo(${t.id},-1)" aria-label="Menos">−</button>
-         <span id="qty-${t.id}">${elegidas}</span>
-         <button class="mas" onclick="chTipo(${t.id},1)" aria-label="Más">+</button>
-       </div>`;
-
-  // El tope por compra es el mismo que aplica chTipo, así el cartel no miente.
-  // Con lote no se pone: el tope depende de lo que se elija en las otras
-  // categorías (comparten cupo), así que un número fijo quedaría viejo.
-  const pie = (!sinCupo && !usaLotes(t) && t.cantidad != null)
-    ? `<div class="tipo-maximo">Máximo ${Math.min(MAX_POR_TIPO, restan)} por compra</div>` : "";
-
-  return `<div class="tipo-card${sinCupo ? " agotado" : ""}${elegidas > 0 ? " elegida" : ""}">
-    <div class="tipo-card-top">
-      <div class="tipo-nombre">${esc(t.nombre)}</div>
-      ${detalles.join("")}
-    </div>
-    <div class="tipo-card-pie">
-      <div class="tipo-precio">${precio == null ? "—" : fmt(precio)}</div>
-      ${control}
-    </div>
-    ${pie}
-  </div>`;
-}
-function chTipo(tipoId, delta){
-  const t = (cur ? tiposALaVenta(cur) : []).find(x => x.id === tipoId);
-  if(!t) return;
-  const nueva = Math.min(topeTipo(t), Math.max(0, (Number(SELECCION[tipoId]) || 0) + delta));
-  SELECCION[tipoId] = nueva;
-  const el = document.getElementById("qty-" + tipoId);
-  if(el){
-    el.textContent = nueva;
-    // La tarjeta queda marcada mientras tenga cantidad. Se toca la clase acá
-    // en vez de re-renderizar: redibujar la lista en cada clic perdería el
-    // foco del botón que acabás de apretar.
-    const card = el.closest(".tipo-card");
-    if(card) card.classList.toggle("elegida", nueva > 0);
-  }
+/* Suma o resta entradas. Se parchea el número en pantalla en vez de
+   re-renderizar: redibujar en cada clic perdería el foco del botón que
+   acabás de apretar. */
+function chCantidad(delta){
+  if(!cur) return;
+  CANTIDAD = Math.min(topeCompra(cur), Math.max(0, CANTIDAD + delta));
+  const el = document.getElementById("qty-entrada");
+  if(el) el.textContent = CANTIDAD;
+  const box = document.getElementById("entrada-box");
+  if(box) box.classList.toggle("elegida", CANTIDAD > 0);
   actualizarResumenDetalle();
 }
-// Los tipos elegidos, con su cantidad, en el orden en que se muestran
+/* De acá para abajo se conserva la forma {tipo, cantidad} que ya esperaban el
+   checkout y crear-pago: "el tipo" ahora es el lote vigente. */
 function itemsSeleccionados(){
-  if(!cur) return [];
-  return tiposALaVenta(cur)
-    .map(t => ({ tipo:t, cantidad: Number(SELECCION[t.id]) || 0 }))
-    .filter(x => x.cantidad > 0);
+  const entrada = entradaALaVenta(cur);
+  return (entrada && CANTIDAD > 0) ? [{ tipo: entrada, cantidad: CANTIDAD }] : [];
 }
 // Una entrada de la lista por cada QR que se va a generar
 function unidadesSeleccionadas(){
@@ -768,7 +649,7 @@ function unidadesSeleccionadas(){
 function totalesSeleccion(){
   let entradas = 0, subtotal = 0, servicio = 0;
   itemsSeleccionados().forEach(({tipo, cantidad})=>{
-    const precio = precioTipo(tipo) || 0;   // el del lote vigente, o el propio
+    const precio = Number(tipo.precio) || 0;
     entradas += cantidad;
     subtotal += precio * cantidad;
     servicio += servicioDe(precio) * cantidad;
@@ -913,10 +794,13 @@ function ckSincronizarAsistentes(){
   const combinado = ckModoCombinado() && unidades.length === 1;
   CK.asistentes = unidades.map((tipo, i)=>{
     // El precio se congela acá con el del lote vigente al momento de comprar
-    const precio = precioTipo(tipo) || 0;
-    const lote = usaLotes(tipo) ? loteVigenteDe(tipo.evento_id) : null;
+    const precio = Number(tipo.precio) || 0;
+    const lote = tipo.lote || null;
     return {
-      tipo_ticket_id: tipo.id,
+      // Ya no hay tipos de ticket: la entrada ES el lote, así que la fila de
+      // compras guarda el nombre del lote como "tipo" (que es lo que lee el
+      // escáner y "Mis Entradas") y el id va en lote_id, no en tipo_ticket_id.
+      tipo_ticket_id: null,
       tipo: tipo.nombre,
       lote_id: lote ? lote.id : null,
       lote: lote ? lote.nombre : null,
@@ -1133,12 +1017,12 @@ function ckPaso1(){
       <div class="ck-item">
         <div class="ck-item-info">
           <p class="ck-item-nombre">${esc(tipo.nombre)}</p>
-          <p class="ck-item-precio">${fmt(precioTipo(tipo) || 0)} - Ticket</p>
+          <p class="ck-item-precio">${fmt(tipo.precio)} - Ticket</p>
         </div>
         <div class="ck-item-qty">
-          <button class="ck-icon-btn" onclick="ckQuitar(${tipo.id})" aria-label="Quitar una entrada de ${esc(tipo.nombre)}">${tacho}</button>
+          <button class="ck-icon-btn" onclick="ckQuitar()" aria-label="Quitar una entrada">${tacho}</button>
           <b>${cantidad}</b>
-          <button class="ck-icon-btn" onclick="ckSumar(${tipo.id})" aria-label="Sumar una entrada de ${esc(tipo.nombre)}">${mas}</button>
+          <button class="ck-icon-btn" onclick="ckSumar()" aria-label="Sumar una entrada">${mas}</button>
         </div>
       </div>`).join("")}
 
@@ -1165,19 +1049,16 @@ function ckPaso1(){
       <button class="btn" id="ck-siguiente" onclick="ckIr(${CK.paso + 1})">Siguiente</button>
     </div>`;
 }
-function ckSumar(tipoId){
-  const t = (TIPOS[cur.id] || []).find(x=>x.id===tipoId);
-  if(!t) return;
-  // topeTipo descuenta lo que ya se eligió de las otras categorías del lote
-  SELECCION[tipoId] = Math.min(topeTipo(t), (Number(SELECCION[tipoId]) || 0) + 1);
+function ckSumar(){
+  if(!cur) return;
+  CANTIDAD = Math.min(topeCompra(cur), CANTIDAD + 1);
   actualizarResumenDetalle();
   renderCheckout();
 }
-/* El tacho baja de a uno; al llegar a 0 el ítem desaparece de la lista.
-   Si se queda sin entradas, no tiene sentido seguir en el checkout. */
-function ckQuitar(tipoId){
-  SELECCION[tipoId] = Math.max(0, (Number(SELECCION[tipoId]) || 0) - 1);
-  if(!SELECCION[tipoId]) delete SELECCION[tipoId];
+/* El tacho baja de a uno; al llegar a 0 no tiene sentido seguir en el
+   checkout, así que se cierra el modal. */
+function ckQuitar(){
+  CANTIDAD = Math.max(0, CANTIDAD - 1);
   actualizarResumenDetalle();
   if(!totalesSeleccion().entradas){ closeModal(); return; }
   renderCheckout();
@@ -1332,7 +1213,7 @@ function ckPaso4(){
       ${itemsSeleccionados().map(({tipo, cantidad})=>`
         <div class="ck-item-simple">
           <span class="ck-item-simple-nombre" title="${esc(tipo.nombre)}">${cantidad > 1 ? cantidad + "× " : ""}${esc(tipo.nombre)}</span>
-          <b>${fmt((precioTipo(tipo) || 0) * cantidad)}</b>
+          <b>${fmt((Number(tipo.precio) || 0) * cantidad)}</b>
         </div>`).join("")}
     </div>
 
@@ -1415,19 +1296,23 @@ async function ckPagar(){
      crea una fila en compras por asistente (con service_role). Contrato:
        { evento, evento_id, fecha_texto, lugar, email,
          comprador: {nombre, apellido, tipo_doc, documento, email, telefono, user_id},
-         items: [{tipo_ticket_id, nombre, lote_id, lote, precio, servicio, cantidad}],
+         items: [{nombre, lote_id, lote, precio, servicio, cantidad}],
          asistentes: [{nombre, apellido, documento, tipo_ticket_id, tipo,
                        lote_id, lote, accesos, precio, servicio}],
          cupon, total }
      El precio de cada entrada es precio + servicio; `total` ya viene sumado.
      comprador.user_id es null cuando compró un invitado.
 
-     lote_id/lote son el lote vigente al momento de comprar (null en los
-     combos, que van con precio fijo). La función TIENE que copiarlos a la
-     fila de compras: el cupo del lote se cuenta desde ahí, y sin eso el lote
-     nunca avanza. Los precios que manda el navegador son informativos — la
-     función debería recalcularlos leyendo el precio del lote vigente antes
-     de cobrar, o un comprador podría mandarse un precio a mano. */
+     Como el evento vende una sola entrada (la del lote vigente), items tiene
+     siempre un elemento. `tipo` de cada asistente es el NOMBRE del lote, que
+     es lo que muestran el escáner y "Mis Entradas"; tipo_ticket_id va en null
+     (los tipos de ticket ya no existen).
+
+     lote_id es el lote vigente al momento de comprar, y la función TIENE que
+     copiarlo a la fila de compras: el cupo del lote se cuenta desde ahí, y sin
+     eso el lote nunca avanza. Los precios que manda el navegador son
+     informativos — la función debería recalcularlos leyendo el precio del lote
+     vigente antes de cobrar, o un comprador podría mandarse un precio a mano. */
   try{
     const r = await fetch(`${SUPABASE_URL}/functions/v1/crear-pago`, {
       method:"POST",
@@ -1440,13 +1325,11 @@ async function ckPagar(){
         email: comprador.email,
         comprador,
         items: itemsSeleccionados().map(({tipo, cantidad})=>{
-          const precio = precioTipo(tipo) || 0;
-          const lote = usaLotes(tipo) ? loteVigenteDe(tipo.evento_id) : null;
+          const precio = Number(tipo.precio) || 0;
           return {
-            tipo_ticket_id: tipo.id,
             nombre: tipo.nombre,
-            lote_id: lote ? lote.id : null,
-            lote: lote ? lote.nombre : null,
+            lote_id: tipo.lote ? tipo.lote.id : null,
+            lote: tipo.lote ? tipo.lote.nombre : null,
             precio,
             servicio: servicioDe(precio),
             cantidad
@@ -1883,18 +1766,14 @@ async function abrirPanel(){
   document.getElementById("admin-panel").style.display="";
   aplicarRol();
   mostrarSeccionAdmin(SECCION_ADMIN);   // aplicarRol ya lo corrigió según el rol
-  // Esperamos las compras: renderEventAdmin necesita los conteos por tipo
+  // Esperamos las compras: renderEventAdmin necesita los conteos por lote
   await loadPurchases();
   if(puedeVerSeccion("eventos")){
-    await cargarTipos(true);   // el panel también edita los tipos pausados
-    renderTiposForm();
+    renderLotesForm();
     renderEventAdmin();
   }
-  // Los selects de cortesías salen de EVENTS + TIPOS, así que van después
-  if(puedeVerSeccion("cortesias")){
-    if(!puedeVerSeccion("eventos")) await cargarTipos(true);
-    cargarSelectsCortesia();
-  }
+  // El select de cortesías sale de EVENTS, así que va después
+  if(puedeVerSeccion("cortesias")) cargarSelectsCortesia();
   // El equipo primero: la tabla de usuarios muestra el rol de cada uno
   if(puedeVerSeccion("equipo")) await loadEquipo();
   if(puedeVerSeccion("usuarios")) loadUsuarios();
@@ -1980,17 +1859,17 @@ async function restoreAdminSession(){
 // [restoreAdminSession(); -> ahora se llama desde initPage()]
 
 /* ================== ADMIN: EVENTOS ================== */
-// Vendidas totales de un evento y, si TODOS sus tipos tienen cupo, el total
-// de ese cupo — para la barra de progreso de la tarjeta. Si algún tipo no
-// tiene límite (cantidad null), la suma "sobre qué" deja de tener sentido:
-// se muestra sólo el número vendido, sin barra ni "/Y".
+// Vendidas totales de un evento y, si TODOS sus lotes tienen cupo, el total
+// de ese cupo — para la barra de progreso de la tarjeta. Si algún lote no
+// tiene límite (cupo null), la suma "sobre qué" deja de tener sentido: se
+// muestra sólo el número vendido, sin barra ni "/Y".
 function progresoEvento(ev){
-  const tipos = tiposDeEvento(ev.id);
-  const vendidas = tipos.reduce((a,t) => a + vendidasTipo(t), 0);
-  const todosConCupo = tipos.length > 0 && tipos.every(t => t.cantidad != null);
-  const cupo = todosConCupo ? tipos.reduce((a,t) => a + Number(t.cantidad), 0) : null;
+  const lotes = lotesDeEvento(ev.id);
+  const vendidas = lotes.reduce((a,l) => a + vendidasLote(l), 0);
+  const todosConCupo = lotes.length > 0 && lotes.every(l => l.cupo != null);
+  const cupo = todosConCupo ? lotes.reduce((a,l) => a + Number(l.cupo), 0) : null;
   const pct = cupo ? Math.min(100, Math.round(vendidas / cupo * 100)) : null;
-  return { tipos, vendidas, cupo, pct };
+  return { lotes, vendidas, cupo, pct };
 }
 /* ---------- EVENTOS DEL STUDIO: LISTA ⇄ DETALLE ----------
    "Eventos" tiene dos vistas: la lista de tarjetas simples (nombre, fecha,
@@ -2004,16 +1883,14 @@ let EV_TAB = "analytics";
 function estadoEvento(ev){
   if(ev.activo === false) return { txt:"Borrador", clase:"borrador" };
   if(eventoAgotado(ev))   return { txt:"Agotado",  clase:"agotado" };
-  if(sinVenta(ev))        return { txt:"Sin entradas cargadas", clase:"sinventa" };
+  if(sinVenta(ev))        return { txt:"Sin lotes cargados", clase:"sinventa" };
   return { txt:"En venta", clase:"venta" };
 }
 
 function renderEventAdmin(){
   const list = document.getElementById("ev-admin-list");
   if(!list) return;
-  const aviso = (!DEMO && !VENTAS_VISTA_OK)
-    ? `<p class="err" style="display:block;margin-bottom:14px">Falta crear la vista <b>ventas_por_tipo</b> en Supabase (sql/03-vistas.sql). Los números de acá abajo son correctos, pero en la página pública los cupos no se van a cerrar solos hasta que la crees.</p>`
-    : "";
+  const aviso = "";
   if(EVENTS.length===0){
     list.innerHTML = aviso + `<p style="color:var(--text-dim);font-size:14px">Todavía no hay eventos. Creá el primero con el botón de abajo.</p>`;
     return;
@@ -2096,7 +1973,6 @@ function duplicarEvento(id){
   document.getElementById("ev-id").value = "";
   document.getElementById("ev-nombre").value = (ev.nombre || "") + " (copia)";
   // Sin ids, saveEvento los inserta como filas nuevas
-  TIPOS_FORM.forEach(t => t.id = null);
   LOTES_FORM.forEach(l => l.id = null);
   LOTES_BORRADOS = [];
   renderLotesForm();
@@ -2115,205 +1991,17 @@ function duplicarEvento(id){
   mostrarTabEvento("editar");
 }
 
-/* ---------- Gestor de tipos de entrada ----------
-   Los tipos se editan en memoria mientras se completa el formulario y recién
-   se guardan cuando se guarda el evento. Así un evento nuevo (que todavía no
-   tiene id) puede nacer con sus entradas ya cargadas. */
-let TIPOS_FORM = [];      // los tipos del evento que se está editando
-let TIPOS_BORRADOS = [];  // ids que hay que borrar al guardar
-
-function tipoVacio(categoria){
-  return { id:null, nombre:"", descripcion:"", precio:"", cantidad:"",
-           categoria: categoria || "ticket", accesos:1, activo:true,
-           // Los combos van con precio y cupo propios; el resto, por lote
-           usa_lotes: categoria !== "combo",
-           valido_desde:"", valido_hasta:"" };
-}
-function agregarTipo(categoria){
-  TIPOS_FORM.push(tipoVacio(categoria));
-  renderTiposForm();
-  // El que se acaba de agregar es el que se va a completar
-  const inputs = document.querySelectorAll("#tipos-list .tipo-form-nombre");
-  const ultimo = inputs[inputs.length-1];
-  if(ultimo) ultimo.focus();
-}
-// Los inputs escriben directo en el array: si re-renderizáramos en cada tecla
-// se perdería el foco a mitad de palabra.
-function setTipoCampo(i, campo, valor){
-  const t = TIPOS_FORM[i];
-  if(!t) return;
-  t[campo] = valor;
-  /* Pasar un tipo a Combos (o sacarlo) cambia de dónde saca el precio: hay que
-     redibujar su ficha, que muestra distintos campos en cada caso. */
-  if(campo === "categoria"){
-    t.usa_lotes = valor !== "combo";
-    renderTiposForm();
-  }
-}
-function moverTipo(i, d){
-  const j = i + d;
-  if(j < 0 || j >= TIPOS_FORM.length) return;
-  [TIPOS_FORM[i], TIPOS_FORM[j]] = [TIPOS_FORM[j], TIPOS_FORM[i]];
-  renderTiposForm();
-}
-function borrarTipo(i){
-  const t = TIPOS_FORM[i];
-  if(!t) return;
-  const vendidas = t.id ? (Number(VENTAS_TIPO[t.id]) || 0) : 0;
-  const aviso = vendidas
-    ? `Ya se vendieron ${vendidas} entrada(s) de "${t.nombre}". Si lo borrás, esas entradas siguen siendo válidas pero se quedan sin tipo asociado.\n\n¿Borrar igual?`
-    : `¿Borrar el tipo "${t.nombre || "sin nombre"}"?`;
-  if(!confirm(aviso)) return;
-  if(t.id) TIPOS_BORRADOS.push(t.id);
-  TIPOS_FORM.splice(i, 1);
-  renderTiposForm();
-}
-function renderTiposForm(){
-  const box = document.getElementById("tipos-list");
-  if(!box) return;
-  if(!TIPOS_FORM.length){
-    box.innerHTML = `<p style="color:var(--text-dim);font-size:13px;margin-bottom:12px">Todavía no cargaste ningún tipo de entrada. Sin al menos uno, el evento se anuncia pero no se puede comprar.</p>`;
-    return;
-  }
-  box.innerHTML = TIPOS_FORM.map((t,i)=>{
-    const vendidas = t.id ? (Number(VENTAS_TIPO[t.id]) || 0) : 0;
-    const cupo = (t.cantidad === "" || t.cantidad == null) ? null : Number(t.cantidad);
-    const porLote = t.usa_lotes !== false;
-    /* Precio y cupo salen del lote cuando el tipo va por lote: se muestran los
-       campos propios sólo en los que no (los combos), para que no queden dos
-       lugares distintos diciendo cuánto sale la misma entrada. */
-    const precioYCupo = porLote
-      ? `<label class="tipo-form-porlote">Precio y cupo
-           <span>Los pone el lote — cargalos en <b>Lotes</b>, más abajo.</span>
-         </label>`
-      : `<label>Precio $
-          <input type="number" min="1" placeholder="8000" value="${t.precio === "" || t.precio == null ? "" : t.precio}"
-                 oninput="setTipoCampo(${i},'precio',this.value)">
-        </label>
-        <label>Cupo (vacío = sin límite)
-          <input type="number" min="0" placeholder="sin límite" value="${cupo == null ? "" : cupo}"
-                 oninput="setTipoCampo(${i},'cantidad',this.value)">
-        </label>`;
-    return `
-    <div class="tipo-form${t.activo === false ? " pausado" : ""}">
-      <div class="tipo-form-head">
-        <span class="tipo-form-num">${i+1}</span>
-        <input class="tipo-form-nombre" placeholder="Nombre (ej: GENERAL)" value="${esc(t.nombre)}"
-               oninput="setTipoCampo(${i},'nombre',this.value)">
-        <div class="tipo-form-acciones">
-          <button class="btn ghost btn-mini" onclick="moverTipo(${i},-1)" title="Subir" ${i===0?"disabled":""}>↑</button>
-          <button class="btn ghost btn-mini" onclick="moverTipo(${i},1)" title="Bajar" ${i===TIPOS_FORM.length-1?"disabled":""}>↓</button>
-          <button class="btn ghost btn-mini" onclick="borrarTipo(${i})" title="Borrar">✕</button>
-        </div>
-      </div>
-      <input class="tipo-form-desc" placeholder="Descripción (ej: Acceso exclusivo terrazas. Barra libre.)" value="${esc(t.descripcion)}"
-             oninput="setTipoCampo(${i},'descripcion',this.value)">
-      <div class="tipo-form-grid">
-        ${precioYCupo}
-        <label>Sección
-          <select onchange="setTipoCampo(${i},'categoria',this.value)">
-            <option value="ticket"${t.categoria!=="combo"?" selected":""}>Tickets</option>
-            <option value="combo"${t.categoria==="combo"?" selected":""}>Combos</option>
-          </select>
-        </label>
-        <label>Accesos (personas)
-          <input type="number" min="1" value="${Number(t.accesos)||1}"
-                 oninput="setTipoCampo(${i},'accesos',this.value)">
-        </label>
-        <label>Válido desde
-          <input placeholder="23:30" value="${esc(t.valido_desde)}"
-                 oninput="setTipoCampo(${i},'valido_desde',this.value)">
-        </label>
-        <label>Válido hasta
-          <input placeholder="02:00" value="${esc(t.valido_hasta)}"
-                 oninput="setTipoCampo(${i},'valido_hasta',this.value)">
-        </label>
-      </div>
-      <div class="tipo-form-pie">
-        <label class="tipo-form-check">
-          <input type="checkbox" ${t.activo === false ? "" : "checked"} onchange="setTipoCampo(${i},'activo',this.checked)">
-          A la venta
-        </label>
-        ${!t.id ? `<span class="tipo-form-vendidas">Nuevo</span>`
-          : porLote ? `<span class="tipo-form-vendidas">Vendidas: ${vendidas} (cupo por lote)</span>`
-          : `<span class="tipo-form-vendidas">Vendidas: ${vendidas}${cupo != null ? "/" + cupo : ""}</span>`}
-      </div>
-    </div>`;
-  }).join("");
-}
-// Convierte una fila del formulario en la fila que espera la base
-function tipoDesdeForm(t, eventoId, orden){
-  const porLote = t.usa_lotes !== false;
-  return {
-    evento_id: Number(eventoId),
-    nombre: t.nombre.trim(),
-    descripcion: (t.descripcion || "").trim() || null,
-    usa_lotes: porLote,
-    // Con lote, precio y cupo de la fila no se usan: los pone el lote vigente.
-    // Se guardan en 0/null para que no quede un precio viejo dando vueltas.
-    precio: porLote ? 0 : (parseInt(t.precio,10) || 0),
-    cantidad: porLote ? null
-      : ((t.cantidad === "" || t.cantidad == null) ? null : (parseInt(t.cantidad,10) || 0)),
-    orden,
-    categoria: t.categoria === "combo" ? "combo" : "ticket",
-    accesos: Math.max(1, parseInt(t.accesos,10) || 1),
-    activo: t.activo !== false,
-    valido_desde: (t.valido_desde || "").trim() || null,
-    valido_hasta: (t.valido_hasta || "").trim() || null
-  };
-}
-/* Guarda los tipos del evento: borra los que se sacaron, actualiza los que ya
-   existían y da de alta los nuevos. El orden en pantalla es el campo "orden". */
-async function sincronizarTipos(eventoId){
-  for(const id of TIPOS_BORRADOS){ await dbDelete("tipos_ticket", id); }
-  TIPOS_BORRADOS = [];
-  for(let i = 0; i < TIPOS_FORM.length; i++){
-    const t = TIPOS_FORM[i];
-    const fila = tipoDesdeForm(t, eventoId, i);
-    if(t.id) await dbUpdate("tipos_ticket", t.id, fila);
-    else {
-      const creado = await dbInsert("tipos_ticket", fila);
-      if(creado && creado[0]) t.id = creado[0].id;
-    }
-  }
-}
-// Lo mismo pero en memoria, para poder probar el panel sin Supabase
-function sincronizarTiposDemo(eventoId){
-  const otros = DEMO_TIPOS.filter(t => t.evento_id != eventoId);
-  DEMO_TIPOS.length = 0;
-  DEMO_TIPOS.push(...otros);
-  TIPOS_FORM.forEach((t,i)=>{
-    if(!t.id) t.id = Date.now() + i;
-    DEMO_TIPOS.push({ ...tipoDesdeForm(t, eventoId, i), id: t.id, oculto: false });
-  });
-  TIPOS_BORRADOS = [];
-  agruparTipos(DEMO_TIPOS);
-}
-// Devuelve el primer problema encontrado, o "" si está todo bien
-function validarTipos(){
-  for(const t of TIPOS_FORM){
-    if(!t.nombre.trim()) return "Todos los tipos de entrada necesitan un nombre.";
-    // El precio de los que van por lote se valida en validarLotes()
-    if(t.usa_lotes !== false) continue;
-    const precio = parseInt(t.precio,10) || 0;
-    // Las entradas gratis todavía no saltean Mercado Pago: si dejamos pasar un
-    // $0, el comprador llega al pago con un total inválido.
-    if(precio <= 0) return `Poné un precio mayor a 0 en "${t.nombre.trim()}". Las entradas gratis todavía no están implementadas.`;
-  }
-  return "";
-}
-
 
 /* ---------- Gestor de lotes ----------
-   Misma idea que los tipos: se editan en memoria y recién se escriben cuando
-   se guarda el evento. Un lote tiene nombre, precio, cupo y el umbral del
-   aviso de "quedan las últimas N". */
+   Los lotes SON las entradas del evento: no hay tipos ni categorías. Se editan
+   en memoria mientras se completa el formulario y recién se escriben cuando se
+   guarda el evento, así un evento nuevo (que todavía no tiene id) puede nacer
+   con su escalera ya cargada. Un lote tiene nombre, precio, cupo y el umbral
+   del aviso de "quedan las últimas N". */
 let LOTES_FORM = [];      // [{id, nombre, precio, cupo, aviso_ultimas}]
 let LOTES_BORRADOS = [];  // ids que hay que borrar al guardar
 
 // ¿Hay alguna categoría que dependa de los lotes? (los combos no)
-function hayTiposPorLote(){ return TIPOS_FORM.some(t => t.usa_lotes !== false); }
-
 function loteVacio(){ return { id:null, nombre:"", precio:"", cupo:"", aviso_ultimas:"" }; }
 function agregarLote(){
   const l = loteVacio();
@@ -2459,8 +2147,8 @@ function sincronizarLotesDemo(eventoId){
 }
 // Devuelve el primer problema encontrado, o "" si está todo bien
 function validarLotes(){
-  if(hayTiposPorLote() && !LOTES_FORM.length){
-    return "Cargá al menos un lote: el precio y el cupo de las entradas salen de ahí, y sin lotes no se puede vender nada.";
+  if(!LOTES_FORM.length){
+    return "Cargá al menos un lote: el precio y el cupo de las entradas salen de ahí, y sin lotes el evento se anuncia pero no se puede comprar.";
   }
   for(let i = 0; i < LOTES_FORM.length; i++){
     const l = LOTES_FORM[i];
@@ -2501,9 +2189,7 @@ function resetEventoForm(){
   elegirColorEvento(COLOR_EVENTO_DEFECTO);
   document.getElementById("ev-secreta").checked=false;
   document.getElementById("ev-agotado").checked=false;
-  TIPOS_FORM = []; TIPOS_BORRADOS = [];
   LOTES_FORM = []; LOTES_BORRADOS = [];
-  renderTiposForm();
   renderLotesForm();
   document.getElementById("ev-foto").value="";
   document.getElementById("ev-thumb").style.display="none";
@@ -2526,22 +2212,7 @@ function editEvento(id){
   elegirColorEvento(colorEvento(ev));
   document.getElementById("ev-secreta").checked = !!ev.ubicacion_secreta;
   document.getElementById("ev-agotado").checked = !!ev.agotado;
-  // Copia editable de los tipos: hasta que no se guarda, no se toca la base
-  TIPOS_FORM = tiposDeEvento(ev.id).map(t=>({
-    id: t.id,
-    nombre: t.nombre || "",
-    descripcion: t.descripcion || "",
-    precio: t.precio,
-    cantidad: t.cantidad == null ? "" : t.cantidad,
-    categoria: t.categoria || "ticket",
-    accesos: Number(t.accesos) || 1,
-    activo: t.activo !== false,
-    usa_lotes: t.usa_lotes !== false,
-    valido_desde: t.valido_desde || "",
-    valido_hasta: t.valido_hasta || ""
-  }));
-  TIPOS_BORRADOS = [];
-  // Copia editable de los lotes: tampoco se toca la base hasta guardar
+  // Copia editable de los lotes: hasta que no se guarda, no se toca la base
   LOTES_FORM = lotesDeEvento(ev.id).map(l=>({
     id: l.id,
     nombre: l.nombre || "",
@@ -2550,7 +2221,6 @@ function editEvento(id){
     aviso_ultimas: l.aviso_ultimas == null ? "" : l.aviso_ultimas
   }));
   LOTES_BORRADOS = [];
-  renderTiposForm();
   renderLotesForm();
   const img = document.getElementById("ev-thumb");
   if(ev.foto_url){ img.src=ev.foto_url; img.style.display="block"; } else img.style.display="none";
@@ -2594,23 +2264,17 @@ async function saveEvento(){
     if(DEMO){
       if(id){ Object.assign(EVENTS.find(e=>e.id==id), data); }
       else { data.id = Date.now(); data.activo=true; EVENTS.push(data); eventoId = data.id; }
-      sincronizarTiposDemo(eventoId);
       sincronizarLotesDemo(eventoId);
     } else {
-      // Los tipos necesitan el id del evento, así que el evento se guarda
-      // primero; los lotes necesitan el id de los tipos, así que van últimos.
+      // Los lotes necesitan el id del evento, así que el evento va primero.
       if(id){ await dbUpdate("eventos", id, data); }
       else {
         const creado = await dbInsert("eventos", data);
         eventoId = creado && creado[0] ? creado[0].id : null;
       }
-      if(eventoId){
-        await sincronizarTipos(eventoId);
-        await sincronizarLotes(eventoId);
-      }
+      if(eventoId) await sincronizarLotes(eventoId);
       if(nombreViejo && nombreViejo !== nombre) await renombrarCompras(nombreViejo, nombre);
       EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
-      await cargarTipos(true);
       await cargarLotesAdmin();
     }
     renderEventAdmin(); loadEvents();
@@ -2650,9 +2314,8 @@ async function deleteEvento(id){
   try{
     if(DEMO){ EVENTS = EVENTS.filter(e=>e.id!==id); }
     else {
-      await dbDelete("eventos", id);   // tipos_ticket y lotes se van con él (FK on delete cascade)
+      await dbDelete("eventos", id);   // sus lotes se van con él (FK on delete cascade)
       EVENTS = (await dbGet("eventos", "activo=eq.true&order=id.asc")).filter(e=>!e.pasado);
-      await cargarTipos(true);
       await cargarLotesAdmin();
     }
     renderEventAdmin(); loadEvents();
@@ -2732,7 +2395,7 @@ function pintarAnalyticsEvento(ev){
   }
 
   pintarLotesAnalytics(ev, ventas, cortesias);
-  pintarTiposAnalytics(ev, ventas, cortesias);
+
   pintarChartEvento(ev, ventas);
 }
 
@@ -2771,51 +2434,6 @@ function pintarLotesAnalytics(ev, ventas, cortesias){
   }).join("");
 }
 
-/* Desglose por tipo de ticket, de mayor a menor recaudación. "Disponibles"
-   es el cupo que queda; un tipo sin cupo (cantidad null) no tiene ni tope ni
-   porcentaje, así que muestra "Sin límite" y un guion.
-
-   Las cortesías no suman a "vendidos" ni a la recaudación, pero SÍ ocupan
-   lugar en el cupo (el que entra con una cortesía ocupa un lugar real en el
-   boliche), así que se descuentan de "disponibles" y se muestran al lado del
-   nombre del tipo. */
-function pintarTiposAnalytics(ev, ventas, cortesias){
-  const tb = document.getElementById("ev-an-tipos");
-  if(!tb) return;
-  const delTipo = (filas, t) => filas.filter(c => String(c.tipo_ticket_id) === String(t.id)
-    || (c.tipo_ticket_id == null && (c.tipo || "") === (t.nombre || "")));
-  const filas = tiposDeEvento(ev.id).map(t=>{
-    const suyas = delTipo(ventas, t);
-    const vendidos = suyas.length;
-    const cortesiasTipo = delTipo(cortesias || [], t).length;
-    const recaudado = suyas.reduce((a,c) => a + (Number(c.total) || 0), 0);
-    // Los que van por lote no tienen cupo propio: el suyo es el del lote, que
-    // se muestra arriba en "Lotes". Acá sólo se dice de dónde sale.
-    const porLote = usaLotes(t);
-    const cupo = porLote || t.cantidad == null ? null : Number(t.cantidad);
-    const ocupados = vendidos + cortesiasTipo;
-    return { nombre:t.nombre || "—", vendidos, cortesias:cortesiasTipo, recaudado, cupo, porLote,
-             disponibles: cupo == null ? null : Math.max(0, cupo - ocupados),
-             pct: cupo ? Math.min(100, Math.round(ocupados / cupo * 100)) : null };
-  }).sort((a,b) => b.recaudado - a.recaudado);
-
-  if(!filas.length){
-    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px">Este evento todavía no tiene tipos de entrada cargados.</td></tr>`;
-    return;
-  }
-  tb.innerHTML = filas.map(f => `
-    <tr>
-      <td data-label="Tipo" class="tabla-tipos-nombre"><b>${esc(f.nombre)}</b>${f.cortesias ? ` <span class="an-cortesias">+${f.cortesias} cortesía${f.cortesias===1?"":"s"}</span>` : ""}</td>
-      <td data-label="Vendidos">${f.vendidos}</td>
-      <td data-label="Disponibles">${f.porLote ? "Según el lote" : (f.disponibles == null ? "Sin límite" : f.disponibles)}</td>
-      <td data-label="% vendido">${f.pct == null ? "—" : `
-        <span class="an-pct">
-          <span class="an-pct-track"><span class="an-pct-fill" style="width:${f.pct}%"></span></span>
-          <span class="an-pct-num">${f.pct}%</span>
-        </span>`}</td>
-      <td data-label="Recaudación"><b style="color:var(--accent)">${fmt(f.recaudado)}</b></td>
-    </tr>`).join("");
-}
 
 /* ---------- Gráfico: ventas (área, $) + visitas (línea, cantidad) ----------
    Un día por punto, desde que se publicó el evento hasta hoy. Dos escalas
@@ -2977,10 +2595,8 @@ async function loadPurchases(){
     document.getElementById("tbody").innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--accent);padding:28px">Error cargando compras. Revisá Supabase.</td></tr>`;
     return;
   }
-  // En el admin tenemos las compras completas: los conteos por tipo y por lote
-  // salen de acá y no de las vistas, así los números son exactos aunque las
-  // vistas no existan.
-  VENTAS_TIPO = ventasTipoDesdePurchases();
+  // En el admin tenemos las compras completas: los conteos por lote salen de
+  // acá y no de la vista, así los números son exactos aunque no exista.
   VENTAS_LOTE = ventasLoteDesdePurchases();
   // Poblar los filtros con lo que realmente existe en las compras
   const sel = document.getElementById("f-evento");
@@ -3565,17 +3181,17 @@ function cargarSelectsCortesia(){
   if(previo && EVENTS.some(e => String(e.id) === previo)) selEv.value = previo;
   corCambiarEvento();
 }
+/* Al elegir el evento se muestra de qué lote va a salir la cortesía: es
+   siempre el vigente, igual que una compra, así que no hay nada que elegir. */
 function corCambiarEvento(){
   const selEv = document.getElementById("cor-evento");
-  const selTipo = document.getElementById("cor-tipo");
-  if(!selEv || !selTipo) return;
+  const info = document.getElementById("cor-lote");
+  if(!selEv || !info) return;
   const ev = EVENTS.find(e => String(e.id) === selEv.value);
-  // Todos los tipos del evento, incluidos los pausados/ocultos: una cortesía
-  // no depende de que ese tipo esté a la venta al público.
-  const tipos = ev ? tiposDeEvento(ev.id) : [];
-  selTipo.innerHTML = tipos.length
-    ? tipos.map(t => `<option value="${t.id}">${esc(t.nombre)}${Number(t.accesos) > 1 ? ` (${Number(t.accesos)} accesos)` : ""}</option>`).join("")
-    : `<option value="">Este evento no tiene tipos de entrada</option>`;
+  const lote = ev ? loteVigente(ev) : null;
+  info.textContent = lote
+    ? `Sale del lote en venta: ${lote.nombre}`
+    : "Este evento no tiene ningún lote con cupo: cargá uno en Eventos.";
 }
 // Vacía los campos pero deja a la vista la cortesía recién generada
 function corLimpiarCampos(){
@@ -3599,9 +3215,8 @@ async function enviarCortesia(){
 
   const ev = EVENTS.find(e => String(e.id) === (document.getElementById("cor-evento")?.value || ""));
   if(!ev) return fallar("Elegí un evento.");
-  const tipoId = document.getElementById("cor-tipo")?.value || "";
-  const tipo = tiposDeEvento(ev.id).find(t => String(t.id) === tipoId);
-  if(!tipo) return fallar("Elegí un tipo de entrada. Si el evento no tiene ninguno, cargalo primero en Eventos.");
+  const lote = loteVigente(ev);
+  if(!lote) return fallar("Este evento no tiene ningún lote con cupo. Cargá uno en Eventos antes de emitir cortesías.");
   const email = (document.getElementById("cor-email")?.value || "").trim();
   if(!emailValido(email)) return fallar("Escribí un email de destino válido.");
 
@@ -3612,15 +3227,16 @@ async function enviarCortesia(){
   // chocar, y el prefijo CORT- hace obvio de dónde salió mirando la tabla.
   const grupo = "CORT-" + Date.now().toString(36).toUpperCase().slice(-5) + Math.random().toString(36).slice(2,6).toUpperCase();
   const codigo = grupo + "-1";
-  // Una cortesía ocupa un lugar real en el boliche, así que también gasta cupo
-  // del lote vigente: por eso lleva lote_id como cualquier venta.
-  const lote = usaLotes(tipo) ? loteVigenteDe(ev.id) : null;
+  /* Una cortesía ocupa un lugar real en el boliche, así que gasta cupo del
+     lote vigente igual que una venta: por eso lleva su lote_id. Y como la
+     entrada ES el lote, "tipo" guarda el nombre del lote (lo que muestran el
+     escáner y "Mis Entradas"). */
   const fila = {
     grupo, codigo,
     evento: ev.nombre, evento_id: ev.id,
     fecha_texto: ev.fecha_texto || null, lugar: ev.lugar || null,
-    tipo: tipo.nombre, tipo_ticket_id: tipo.id, accesos: Number(tipo.accesos) || 1,
-    lote: lote ? lote.nombre : null, lote_id: lote ? lote.id : null,
+    tipo: lote.nombre, tipo_ticket_id: null, accesos: 1,
+    lote: lote.nombre, lote_id: lote.id,
     nombre, apellido, email,
     comprador_nombre: nombre, comprador_apellido: apellido, comprador_documento: null, comprador_telefono: null,
     total: 0,                 // una cortesía no factura: se regala
@@ -4689,11 +4305,9 @@ async function initPage(){
 
   if(page==="eventos"){
     iniciarHeroCarrusel();
-    // Los precios y los cupos salen de los tipos, de los lotes y de cuántas se
-    // vendieron: los tres tienen que estar antes de pintar nada.
-    await cargarTipos();
+    // El precio y el cupo salen del lote vigente: los lotes tienen que estar
+    // cargados antes de pintar nada.
     await cargarLotesPublico();
-    await cargarVentasTipo();
     await loadEvents();
     loadPatrocinadores();
     checkReturnFromPayment();
@@ -4728,7 +4342,6 @@ async function initPage(){
     // Sin el filtro de pasados, un evento finalizado aparecía en "Eventos" Y en
     // "Eventos pasados" a la vez. Mismo criterio que loadEvents() y saveEvento().
     try{ EVENTS = DEMO ? DEMO_EVENTS : (await dbGet("eventos","activo=eq.true&order=id.asc")).filter(e=>!e.pasado); }catch(e){}
-    await cargarVentasTipo();   // deja VENTAS_VISTA_OK para el aviso del panel
     await cargarLotesAdmin();
     toggleSecreta();
     if(logged){
