@@ -27,23 +27,31 @@ What's **not** done yet:
 - Minimum age, "duplicate event" for the weekly recurring shows — `BRONX-SPEC.md` §4.
 - **Deferred delivery** of the tickets (X hours before the event) — `BRONX-SPEC.md` §10. The rest of that section (4-step checkout, DNI per attendee, order number) is done, see "Checkout de 4 pasos" below.
 - **The `reenviar-entradas` Edge Function.** "Mis Entradas" has a "¿Compraste sin cuenta?" box that POSTs an email to `${SUPABASE_URL}/functions/v1/reenviar-entradas` so the tickets get re-sent there. The UI, its validation and its neutral-answer behaviour are done and tested; **the function itself does not exist yet**, so today that call always fails and the box shows its error message. Like `crear-pago`, it lives outside this repo.
-- No GitHub-to-Cloudflare deploy or Mercado Pago credentials for Bronx yet (`BRONX-SPEC.md` §6). `MP_ACCESS_TOKEN` must be Bronx's so the money lands in their account.
+- No Mercado Pago credentials for Bronx yet (`BRONX-SPEC.md` §6). `MP_ACCESS_TOKEN` must be Bronx's so the money lands in their account. (The GitHub → Cloudflare deploy **is** set up now — see Deploy.)
 
 ## Running locally
 
-No build/install step — it's plain HTML/CSS/JS served as static files. Browser APIs used (camera for the scanner) require a real server, not `file://`:
+No build/install step — it's plain HTML/CSS/JS served as static files. Browser APIs used (camera for the scanner) require a real server, not `file://`. **Serve `public/`, not the repo root** — that directory is the site (see Deploy):
 
 ```
-python -m http.server 8000
+cd public && python -m http.server 8000
 ```
 
 Then open `http://localhost:8000`. There is no test suite, linter, or bundler configured.
 
 ## Deploy
 
-Not deployed yet. Per `BRONX-SPEC.md` §6, this needs its own GitHub repo and its own Cloudflare Workers deploy (the torino Workers project must **not** be reused). Once set up, the routing convention to preserve is the same as torino: `go()`'s `PAGINAS` map in `js/app.js` navigates to extensionless paths (`/entradas`, `/admin`, `/escaner`, `/cuenta`), relying on the host mapping those to the matching `.html` file. Keep new pages to the same `<name>.html` → `/<name>` convention.
+Cloudflare Workers static assets, built from GitHub (`valenncost/BronxSocialClub`) into the Worker **`bronxsocialclub`**, configured in `wrangler.jsonc`. Its own project — the torino Workers project is **not** reused (`BRONX-SPEC.md` §6).
+
+**The site is `public/`, and only `public/`.** Everything in that directory is published as a URL; everything outside it (`sql/`, the `.md` briefs, `.claude/`, and `.git/`) is not. That split is the whole reason the site doesn't live at the repo root: the assets directory is uploaded wholesale, and with the root as the assets directory Cloudflare would serve `/.git/` — enough for anyone to reconstruct the repo. There is an `.assetsignore` convention floating around, but it is undocumented for Workers and its effect could not be verified, so the layout does the work instead of a filter. **Don't put anything in `public/` that shouldn't be public, and don't repoint `directory` at the root.**
+
+Routing convention (same as torino): `go()`'s `PAGINAS` map in `js/app.js` navigates to extensionless paths (`/entradas`, `/admin`, `/escaner`, `/cuenta`), which `html_handling: "auto-trailing-slash"` resolves to the matching `.html`. Keep new pages to the same `<name>.html` → `/<name>` convention, and put them in `public/`.
+
+Validate a config change without publishing with `npx wrangler deploy --dry-run`. Note its "Read N files" line is **not** the count of files to be uploaded (it over-reports), so don't use it to audit what gets published — check the contents of `public/` instead.
 
 ## File map
+
+Everything the browser loads lives under **`public/`** (the published site); everything else in the repo is tooling and documentation that never ships. Paths below are written as they appear in the source — `js/app.js` means `public/js/app.js`.
 
 - `js/app.js` — **the entire application logic**, shared by every page (~1700 lines, no modules). Config constants (`SUPABASE_URL`, `SUPABASE_KEY`, `ADMIN_EMAIL`, `SERVICIO_PCT`) live at the very top.
 - `css/estilos.css` — all styles, shared by every page. Tokens in `:root` define the theme — see "Design system" below.

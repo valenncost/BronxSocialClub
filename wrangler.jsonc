@@ -1,0 +1,27 @@
+{
+  // Sitio estático: no hay build ni código de Worker, sólo los archivos que
+  // ya están en el repo. Cloudflare los sirve directo desde el directorio de
+  // assets — por eso no hay "main".
+  //
+  // TODO lo que esté dentro de public/ queda publicado como una URL del sitio,
+  // y nada de lo que esté afuera. Por eso el sitio vive en public/ y no en la
+  // raíz: en la raíz están .git/, sql/ y los .md internos, que si fueran el
+  // directorio de assets quedarían servidos (con .git/ alcanza para
+  // reconstruir el repo entero). Antes de agregar algo acá adentro, preguntate
+  // si querés que sea público.
+  "name": "bronxsocialclub",
+  "compatibility_date": "2026-09-05",
+  "assets": {
+    "directory": "./public",
+
+    // El sitio navega a rutas sin extensión (/entradas, /admin, /escaner,
+    // /cuenta; ver el mapa PAGINAS de js/app.js). "auto-trailing-slash" es lo
+    // que hace que /entradas sirva entradas.html: si esto cambia, esas rutas
+    // pasan a dar 404 y la navegación del sitio se rompe entera.
+    "html_handling": "auto-trailing-slash",
+
+    // Una ruta que no existe es un 404 de verdad. Nada de servir index.html
+    // como comodín: no es una SPA, cada pantalla es un .html real.
+    "not_found_handling": "none"
+  }
+}
